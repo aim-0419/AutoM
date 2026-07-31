@@ -1,0 +1,71 @@
+{
+  "name": "marketing-app",
+  "version": "2.0.1",
+  "description": "키워드 기반 AI 블로그 자동 포스팅 데스크톱 앱",
+  "main": "backend/apps/blog/index.js",
+  "author": "",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "start:creator": "electron backend/apps/creator/index.js",
+    "check:architecture": "node scripts/check-architecture.js",
+    "test": "node --test scripts/test-core.test.js",
+    "test:creator": "node --test scripts/test-creator.test.js",
+    "test:ui": "node scripts/test-ui-smoke.js",
+    "test:youtube-ui": "node scripts/test-youtube-ui.js",
+    "test:providers": "node scripts/test-providers.js",
+    "prepare:chromium": "node scripts/prepare-chromium.js",
+    "build:win": "npm run prepare:chromium && electron-builder --win nsis --x64",
+    "build:creator": "npm run prepare:chromium && electron-builder --config electron-builder.creator.json --win nsis --x64"
+  },
+  "devDependencies": {
+    "electron": "^43.1.0",
+    "electron-builder": "^26.15.3"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
+    "@google/genai": "^2.10.0",
+    "openai": "^6.45.0",
+    "playwright": "^1.61.1"
+  },
+  "build": {
+    "appId": "com.autom.marketing-app",
+    "productName": "AutoM",
+    "artifactName": "AutoM Setup.${ext}",
+    "asar": true,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "backend/apps/blog/**/*",
+      "backend/shared/**/*",
+      "backend/core/**/*",
+      "backend/features/blog/**/*",
+      "frontend/blog/**/*",
+      "frontend/shared/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "vendor/ms-playwright",
+        "to": "ms-playwright"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
+  }
+}

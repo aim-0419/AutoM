@@ -1,0 +1,22 @@
+node_modules/
+dist/
+dist-creator/
+out/
+vendor/
+
+# 사용자 설정 및 민감 정보
+config/
+*.config.json
+naver-profile/
+
+# 로그
+logs/*
+!logs/.gitkeep
+
+# 산출물
+output/*
+!output/.gitkeep
+
+# OS
+Thumbs.db
+.DS_Store

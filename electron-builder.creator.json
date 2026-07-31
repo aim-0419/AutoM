@@ -1,0 +1,43 @@
+{
+  "appId": "com.autom.creator",
+  "productName": "AutoM Creator",
+  "artifactName": "AutoM Creator Setup.${ext}",
+  "asar": true,
+  "directories": {
+    "output": "dist-creator"
+  },
+  "extraMetadata": {
+    "name": "autom-creator",
+    "main": "backend/apps/creator/index.js",
+    "productName": "AutoM Creator"
+  },
+  "files": [
+    "backend/apps/creator/**/*",
+    "backend/shared/**/*",
+    "backend/core/**/*",
+    "backend/features/**/*",
+    "frontend/**/*",
+    "package.json"
+  ],
+  "extraResources": [
+    {
+      "from": "vendor/ms-playwright",
+      "to": "ms-playwright"
+    }
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true
+  }
+}

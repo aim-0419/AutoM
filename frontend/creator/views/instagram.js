@@ -1,0 +1,372 @@
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+const STAGE_LABELS = {
+  writing: '카드 내용 작성 중...',
+  illustrating: '배경 이미지 생성 중...',
+  rendering: '카드 PNG 합성 중...',
+  done: '카드 묶음 생성 완료',
+};
+
+const PUBLISH_STAGE_LABELS = {
+  opening: '인스타그램 작성 화면 여는 중...',
+  uploading: '카드 이미지 업로드 중...',
+  captioning: '캡션 입력 중...',
+  publishing: '인스타그램에 공유 중...',
+  verifying: '발행 결과 확인 중...',
+  published: '인스타그램 발행 완료',
+};
+
+export function renderOutput(container, content) {
+  const area = container.querySelector('#instagram-output');
+  area.innerHTML = `
+    <section class="settings-section creator-instagram-result" aria-labelledby="instagram-result-title">
+      <header class="creator-instagram-section-header">
+        <div>
+          <span class="creator-instagram-section-label">생성 결과</span>
+          <h2 id="instagram-result-title">${escapeHtml(content.title)}</h2>
+        </div>
+        <span class="creator-instagram-complete-badge">로컬 저장 완료</span>
+      </header>
+
+      <dl class="creator-instagram-result-meta">
+        <div>
+          <dt>저장 위치</dt>
+          <dd class="instagram-output-path">${escapeHtml(content.workDir)}</dd>
+        </div>
+        <div>
+          <dt>해시태그</dt>
+          <dd class="creator-instagram-tags">${content.tags
+            .map((tag) => `#${escapeHtml(tag)}`)
+            .join(' ')}</dd>
+        </div>
+      </dl>
+
+      <div class="creator-instagram-caption-field">
+        <label for="instagram-caption">게시물 캡션</label>
+        <p id="instagram-caption-help">실제 발행 전에 문구와 해시태그를 확인하세요.</p>
+        <textarea
+          id="instagram-caption"
+          class="instagram-caption"
+          aria-describedby="instagram-caption-help"
+        >${escapeHtml(content.captionText)}</textarea>
+      </div>
+
+      <aside class="creator-instagram-publish" aria-labelledby="instagram-publish-title">
+        <div class="creator-instagram-publish-copy">
+          <strong id="instagram-publish-title">인스타그램 발행</strong>
+          <p>아래 버튼은 현재 카드와 캡션을 연결된 계정에 실제로 발행합니다.</p>
+        </div>
+        <button type="button" id="btn-publish-instagram">실제 발행</button>
+        <span id="instagram-publish-result" class="test-result" role="status" aria-live="polite"></span>
+      </aside>
+      <div
+        id="instagram-publish-progress"
+        class="instagram-progress test-result"
+        role="status"
+        aria-live="polite"
+      ></div>
+    </section>
+
+    <section class="settings-section creator-instagram-preview" aria-labelledby="instagram-preview-title">
+      <header class="creator-instagram-section-header">
+        <div>
+          <span class="creator-instagram-section-label">미리보기</span>
+          <h2 id="instagram-preview-title">카드 이미지</h2>
+        </div>
+        <span class="creator-instagram-card-total">${content.cards.length}장</span>
+      </header>
+      <div class="instagram-preview-grid">
+        ${content.cards
+          .map(
+            (card) => `
+              <article class="instagram-preview-card">
+                <img src="${escapeHtml(card.fileUrl)}" alt="${escapeHtml(card.headline)}" />
+                <div class="instagram-card-copy">
+                  <strong>${escapeHtml(card.headline)}</strong>
+                  <span>${escapeHtml(card.body)}</span>
+                </div>
+              </article>`
+          )
+          .join('')}
+      </div>
+    </section>
+  `;
+
+  const publishButton = area.querySelector('#btn-publish-instagram');
+  const publishResultEl = area.querySelector('#instagram-publish-result');
+  publishButton.addEventListener('click', async () => {
+    const confirmed = window.confirm('현재 카드와 캡션을 인스타그램 계정에 실제로 발행할까요?');
+    if (!confirmed) return;
+
+    publishButton.disabled = true;
+    publishResultEl.textContent = '발행 요청 중...';
+    publishResultEl.className = 'test-result';
+    try {
+      const result = await window.api.publishInstagramCarousel({
+        keyword: content.keyword,
+        title: content.title,
+        caption: area.querySelector('#instagram-caption').value.trim(),
+        cards: content.cards.map((card) => ({ path: card.path })),
+      });
+      publishResultEl.textContent = result.message;
+      publishResultEl.className = `test-result ${result.success ? 'success' : 'error'}`;
+      if (result.url) {
+        const link = document.createElement('button');
+        link.type = 'button';
+        link.className = 'secondary instagram-open-post';
+        link.textContent = '게시물 열기';
+        link.addEventListener('click', () => window.api.historyOpenUrl(result.url));
+        publishResultEl.insertAdjacentElement('afterend', link);
+      }
+    } catch (error) {
+      publishResultEl.textContent = error.message || '인스타그램 발행 중 오류가 발생했습니다.';
+      publishResultEl.className = 'test-result error';
+    } finally {
+      publishButton.disabled = false;
+    }
+  });
+}
+
+export async function initInstagramView(container) {
+  container.innerHTML = `
+    <div class="instagram-layout creator-instagram-view">
+      <section class="creator-instagram-process" aria-label="인스타그램 카드 제작 단계">
+        <ol class="creator-instagram-steps">
+          <li>
+            <span class="creator-instagram-step-number">1</span>
+            <span><strong>계정 확인</strong><small>연결 상태 확인</small></span>
+          </li>
+          <li>
+            <span class="creator-instagram-step-number">2</span>
+            <span><strong>주제 입력</strong><small>카드 방향 정하기</small></span>
+          </li>
+          <li>
+            <span class="creator-instagram-step-number">3</span>
+            <span><strong>카드 생성</strong><small>이미지와 캡션 준비</small></span>
+          </li>
+          <li>
+            <span class="creator-instagram-step-number">4</span>
+            <span><strong>검토 및 발행</strong><small>최종 내용 확인</small></span>
+          </li>
+        </ol>
+      </section>
+
+      <section class="settings-section creator-instagram-workspace" aria-labelledby="instagram-compose-title">
+        <header class="creator-instagram-card-header">
+          <div>
+            <span class="creator-instagram-section-label">인스타그램</span>
+            <h2 id="instagram-compose-title">인스타그램 카드</h2>
+            <p>계정 상태를 확인하고 카드에서 다룰 주제와 이미지 수를 설정하세요.</p>
+          </div>
+        </header>
+
+        <div class="creator-instagram-account" aria-labelledby="instagram-account-title">
+          <div class="creator-instagram-account-heading">
+            <h3 id="instagram-account-title">계정 연결</h3>
+            <span class="creator-instagram-session-label">로그인 상태</span>
+          </div>
+          <div class="creator-instagram-session">
+            <span id="instagram-session-status" role="status" aria-live="polite">확인 중...</span>
+          </div>
+          <div class="creator-instagram-account-actions">
+            <button
+              id="btn-instagram-login"
+              type="button"
+              class="secondary"
+              aria-describedby="instagram-session-warning"
+            >로그인</button>
+            <button
+              id="btn-instagram-reset"
+              type="button"
+              class="secondary"
+              aria-describedby="instagram-session-warning"
+            >초기화</button>
+          </div>
+          <p id="instagram-session-warning" class="creator-instagram-account-note">
+            초기화하면 이 기기에 저장된 인스타그램 로그인 세션이 삭제됩니다.
+          </p>
+        </div>
+
+        <div class="creator-instagram-compose">
+          <div class="creator-instagram-field">
+            <label for="instagram-keyword">주제</label>
+            <p id="instagram-keyword-help">카드에서 다룰 핵심 주제를 입력하세요.</p>
+            <textarea
+              id="instagram-keyword"
+              rows="4"
+              placeholder="예: 비타민B12 부족 신호와 식단 관리"
+              aria-describedby="instagram-keyword-help instagram-recommend-note"
+            ></textarea>
+          </div>
+
+          <div class="instagram-keyword-actions">
+            <button id="btn-recommend-instagram-keyword" type="button" class="secondary">키워드 자동추천</button>
+            <span id="instagram-recommend-result" class="test-result" role="status" aria-live="polite"></span>
+          </div>
+          <p id="instagram-recommend-note" class="creator-instagram-api-note">
+            키워드 자동추천은 설정된 텍스트 AI API를 사용할 수 있습니다.
+          </p>
+
+          <div class="creator-instagram-generate-row">
+            <div class="creator-instagram-count-field">
+              <label for="instagram-card-count">카드 수</label>
+              <select
+                id="instagram-card-count"
+                class="instagram-card-count"
+                aria-describedby="instagram-card-count-help"
+              >
+                ${[3, 4, 5, 6, 7, 8, 9, 10]
+                  .map((count) => `<option value="${count}" ${count === 5 ? 'selected' : ''}>${count}장</option>`)
+                  .join('')}
+              </select>
+              <span id="instagram-card-count-help">3장부터 10장까지</span>
+            </div>
+
+            <div class="creator-instagram-generate-action">
+              <button id="btn-generate-instagram" type="button">카드 생성</button>
+              <span id="instagram-result" class="test-result" role="status" aria-live="polite"></span>
+            </div>
+          </div>
+
+          <div
+            id="instagram-progress"
+            class="instagram-progress test-result"
+            role="status"
+            aria-live="polite"
+          ></div>
+        </div>
+      </section>
+
+      <div id="instagram-output" class="creator-instagram-output">
+        <section class="settings-section creator-instagram-empty" aria-labelledby="instagram-empty-title">
+          <span class="creator-instagram-empty-mark" aria-hidden="true"></span>
+          <h2 id="instagram-empty-title">카드 미리보기</h2>
+          <p>카드를 생성하면 이미지와 캡션이 여기에 표시됩니다.</p>
+        </section>
+      </div>
+    </div>
+  `;
+
+  const button = container.querySelector('#btn-generate-instagram');
+  const resultEl = container.querySelector('#instagram-result');
+  const progressEl = container.querySelector('#instagram-progress');
+  const sessionStatusEl = container.querySelector('#instagram-session-status');
+  const loginButton = container.querySelector('#btn-instagram-login');
+  const resetButton = container.querySelector('#btn-instagram-reset');
+  const recommendButton = container.querySelector('#btn-recommend-instagram-keyword');
+  const recommendResultEl = container.querySelector('#instagram-recommend-result');
+
+  const refreshSessionStatus = async () => {
+    const status = await window.api.instagramSessionStatus();
+    sessionStatusEl.textContent = status.loggedIn
+      ? status.username
+        ? `연결됨 (@${status.username})`
+        : '연결됨'
+      : '연결 안 됨';
+    sessionStatusEl.className = `test-result ${status.loggedIn ? 'success' : ''}`;
+  };
+
+  await refreshSessionStatus();
+
+  loginButton.addEventListener('click', async () => {
+    loginButton.disabled = true;
+    resultEl.textContent = '열린 Chromium 창에서 로그인해 주세요.';
+    resultEl.className = 'test-result';
+    try {
+      const result = await window.api.instagramLogin();
+      resultEl.textContent = result.message;
+      resultEl.className = `test-result ${result.success ? 'success' : 'error'}`;
+      await refreshSessionStatus();
+    } finally {
+      loginButton.disabled = false;
+    }
+  });
+
+  resetButton.addEventListener('click', async () => {
+    resetButton.disabled = true;
+    try {
+      const result = await window.api.instagramResetSession();
+      resultEl.textContent = result.message;
+      resultEl.className = `test-result ${result.success ? 'success' : 'error'}`;
+      await refreshSessionStatus();
+    } finally {
+      resetButton.disabled = false;
+    }
+  });
+
+  recommendButton.addEventListener('click', async () => {
+    // 블로그와 같은 추천 기능을 사용하며, 발행 기록에 있는 키워드는 추천 대상에서 제외한다.
+    recommendButton.disabled = true;
+    recommendResultEl.textContent = '추천 받는 중...';
+    recommendResultEl.className = 'test-result';
+    try {
+      const result = await window.api.recommendKeyword();
+      if (!result.success) {
+        recommendResultEl.textContent = result.message;
+        recommendResultEl.className = 'test-result error';
+        return;
+      }
+      container.querySelector('#instagram-keyword').value = result.keyword;
+      recommendResultEl.textContent = `추천됨: ${result.keyword}`;
+      recommendResultEl.className = 'test-result success';
+    } catch (error) {
+      recommendResultEl.textContent = error.message || '키워드 추천에 실패했습니다.';
+      recommendResultEl.className = 'test-result error';
+    } finally {
+      recommendButton.disabled = false;
+    }
+  });
+  const removeProgressListener = window.api.onInstagramProgress((progress) => {
+    const label = STAGE_LABELS[progress.stage] || progress.stage;
+    const counter = progress.total ? ` (${progress.current}/${progress.total})` : '';
+    progressEl.textContent = `${label}${counter}`;
+    progressEl.className = `instagram-progress test-result ${progress.stage === 'done' ? 'success' : ''}`;
+  });
+  window.api.onInstagramPublishProgress((progress) => {
+    const publishProgressEl = container.querySelector('#instagram-publish-progress');
+    if (!publishProgressEl) return;
+    publishProgressEl.textContent = PUBLISH_STAGE_LABELS[progress.stage] || progress.stage;
+    publishProgressEl.className = `instagram-progress test-result ${progress.stage === 'published' ? 'success' : ''}`;
+  });
+
+  button.addEventListener('click', async () => {
+    const keyword = container.querySelector('#instagram-keyword').value.trim();
+    const cardCount = Number(container.querySelector('#instagram-card-count').value);
+    if (!keyword) {
+      resultEl.textContent = '주제를 입력해 주세요.';
+      resultEl.className = 'test-result error';
+      return;
+    }
+
+    button.disabled = true;
+    resultEl.textContent = '생성 요청 중...';
+    resultEl.className = 'test-result';
+    progressEl.textContent = '';
+    container.querySelector('#instagram-output').innerHTML = '';
+    try {
+      const result = await window.api.generateInstagramCarousel({ keyword, cardCount });
+      if (!result.success) {
+        resultEl.textContent = result.message;
+        resultEl.className = 'test-result error';
+        return;
+      }
+      resultEl.textContent = 'PNG 카드와 캡션이 저장되었습니다.';
+      resultEl.className = 'test-result success';
+      renderOutput(container, result.content);
+    } catch (error) {
+      resultEl.textContent = error.message || '인스타그램 카드 생성 중 오류가 발생했습니다.';
+      resultEl.className = 'test-result error';
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  void removeProgressListener;
+}
