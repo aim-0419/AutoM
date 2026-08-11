@@ -6,9 +6,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { _electron: electron, chromium } = require('playwright');
+const { renderDisclaimerBlock, splitGeneratedDisclaimerBlock } = require('../backend/core/contentSafety');
 
 const REQUIRED_FLAG = '--publish-private';
-const DEFAULT_KEYWORD = '\uC624\uBA54\uAC003 \uACE0\uB974\uB294 \uBC95\uACFC \uC12D\uCDE8 \uC8FC\uC758\uC0AC\uD56D';
+const DEFAULT_KEYWORD = '작은 집 수납 공간 정리 방법';
 
 function writeJson(filePath, value) {
   // 사람이 나중에 검사 결과를 다시 볼 수 있도록 중간 결과도 JSON 파일로 남긴다.
@@ -22,11 +23,8 @@ function insertInternalLink(body, entry) {
   )
     .replace(/\s+/g, ' ')
     .trim()}\n${entry.url}`;
-  const disclaimer = '\n\n---\n본 글은 일반적인 건강 정보 제공을 목적으로 하며, 의학적 진단이나 치료를 대체하지 않습니다.';
-  if (body.endsWith(disclaimer)) {
-    return `${body.slice(0, -disclaimer.length).trimEnd()}${block}${disclaimer}`;
-  }
-  return `${body.trimEnd()}${block}`;
+  const separated = splitGeneratedDisclaimerBlock(body);
+  return `${separated.body.trimEnd()}${block}${renderDisclaimerBlock(separated.disclaimers)}`;
 }
 
 async function inspectPublishedPost(url, expectedTitle, linkedLogNo, outputDir) {
@@ -155,6 +153,7 @@ async function main() {
     const generatedImageCount = await page.locator('.preview-image').count();
     const qualityText = await page.locator('#quality-summary').innerText();
     const qualityClass = await page.locator('#quality-summary').getAttribute('class');
+    const generatedDisclaimerCount = splitGeneratedDisclaimerBlock(originalBody).disclaimers.length;
     const contentSummary = {
       keyword: DEFAULT_KEYWORD,
       title: generatedTitle,
@@ -163,6 +162,7 @@ async function main() {
       generatedImageCount,
       imageMarkers: (originalBody.match(/^\[IMAGE_\d+\]$/gm) || []).length,
       headings: (originalBody.match(/^##\s+/gm) || []).length,
+      generatedDisclaimerCount,
       qualityText,
       qualityClass,
       rendererErrors,
@@ -171,6 +171,9 @@ async function main() {
     if (generatedImageCount < 2 || !qualityClass.includes('pass') && !qualityClass.includes('caution')) {
       throw new Error('실제 생성 결과가 이미지 또는 자동 품질 기준을 충족하지 못했습니다.');
     }
+    if (generatedDisclaimerCount !== 0) {
+      throw new Error('일반 주제에 민감 정보 고지문이 잘못 추가되었습니다.');
+    }
     await page.screenshot({ path: path.join(outputDir, '01-generated-preview.png'), fullPage: true });
 
     const linkedBody = insertInternalLink(originalBody, linkEntry);
@@ -178,11 +181,12 @@ async function main() {
     const linkedLogNo = new URL(linkEntry.url).pathname.split('/').filter(Boolean).pop();
     const previewLinkCount = await page.locator('#preview-render a').count();
     const previewHref = await page.locator('#preview-render a').first().getAttribute('href');
+    const linkedDisclaimerCount = splitGeneratedDisclaimerBlock(linkedBody).disclaimers.length;
     writeJson(path.join(outputDir, 'internal-link-preview-check.json'), {
       sourceUrl: linkEntry.url,
       previewLinkCount,
       previewHref,
-      disclaimerStillLast: linkedBody.trim().endsWith('의학적 진단이나 치료를 대체하지 않습니다.'),
+      linkedDisclaimerCount,
     });
     if (previewLinkCount !== 1 || previewHref !== linkEntry.url) {
       throw new Error('미리보기 내부링크가 올바르게 표시되지 않았습니다.');

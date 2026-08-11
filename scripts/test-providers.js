@@ -3,10 +3,10 @@
  *
  * 사용법:
  *   ANTHROPIC_API_KEY=sk-... OPENAI_API_KEY=sk-... GEMINI_API_KEY=... \
- *     node scripts/test-providers.js --keyword="루테인 눈 영양제"
+ *     node scripts/test-providers.js --keyword="초보 홈카페 원두 고르기"
  *
  * 옵션:
- *   --keyword=<string>       테스트할 키워드 (기본값: "루테인 눈 영양제")
+ *   --keyword=<string>       테스트할 키워드 (기본값: "초보 홈카페 원두 고르기")
  *   --text=<provider>        텍스트 프로바이더 1개만 테스트 (anthropic|openai|gemini)
  *   --image=<provider>       이미지 프로바이더 1개만 테스트 (openai|gemini)
  *
@@ -26,7 +26,7 @@ const ENV_KEY_MAP = {
 
 function parseArgs(argv) {
   // 명령줄에서 특정 공급자·키워드만 골라 실제 연결 테스트를 할 수 있게 옵션을 읽는다.
-  const args = { keyword: '루테인 눈 영양제' };
+  const args = { keyword: '초보 홈카페 원두 고르기' };
   for (const arg of argv) {
     const match = arg.match(/^--([^=]+)=(.*)$/);
     if (match) {

@@ -217,7 +217,7 @@ export function initMainView(container) {
   container.innerHTML = `
     <div class="settings-section">
       <h2>키워드 입력</h2>
-      <textarea id="keyword-input" rows="4" placeholder="한 줄에 하나씩 키워드를 입력하세요 (예: 루테인 눈 영양제)"></textarea>
+      <textarea id="keyword-input" rows="4" placeholder="한 줄에 하나씩 키워드를 입력하세요 (예: 초보 홈카페 원두 고르기)"></textarea>
       <div class="keyword-actions">
         <button type="button" id="btn-recommend-keyword" class="secondary">키워드 자동추천</button>
         <span class="test-result" id="recommend-result"></span>

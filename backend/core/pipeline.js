@@ -4,26 +4,30 @@ const textProviders = require('./providers/text');
 const imageProviders = require('./providers/image');
 const { resolveConfiguredProvider } = require('./providers/configuredProvider');
 const { isNaverBlogUrl } = require('./contentQuality');
+const {
+  appendSensitiveDisclaimers,
+  renderDisclaimerBlock,
+  splitGeneratedDisclaimerBlock,
+} = require('./contentSafety');
 
 /**
  * 한 키워드를 "글 + 이미지 + 내부링크가 가능한 결과물"로 만드는 작업 흐름이다.
  * 여기서는 AI를 호출하고 파일을 만들지만, 실제 네이버 발행은 features/blog가 담당한다.
  */
-const DISCLAIMER = '본 글은 일반적인 건강 정보 제공을 목적으로 하며, 의학적 진단이나 치료를 대체하지 않습니다.';
 const INTERNAL_LINK_HEADING = '함께 읽으면 좋은 글';
 const INTERNAL_LINK_LIMIT = 3;
 const IMAGE_GENERATION_ATTEMPTS = 3;
 const IMAGE_SAFETY_SUFFIX = [
-  'Create a clean editorial lifestyle photograph for an informational article.',
+  'Create a clean original editorial image that accurately supports the informational topic.',
   'Do not include any visible or readable text, letters, numbers, logos, trademarks, brand names, labels, dosage tables, supplement facts, watermarks, charts, or medical claims.',
   'Any container or packaging must be completely plain, unbranded, and label-free.',
-  'Do not create before-and-after imagery or imply guaranteed health outcomes.',
+  'Do not create before-and-after imagery, false evidence, unsafe instructions, or guaranteed outcomes.',
 ].join(' ');
 const IMAGE_FALLBACK_SCENES = [
-  'a tidy home desk with a plain glass of water and soft natural daylight',
-  'a bright kitchen table with fresh whole foods in plain unbranded bowls',
-  'comfortable walking shoes beside a quiet sunlit park path',
-  'a calm bedroom with neatly arranged bedding and gentle morning light',
+  'a tidy worktable with simple unbranded tools and soft natural daylight',
+  'an organized shelf with neutral everyday objects and balanced studio lighting',
+  'a quiet indoor workspace with a blank notebook and a plain device seen from a distance',
+  'a calm outdoor setting with a clear focal point and ample negative space',
 ];
 const INTERNAL_LINK_STOPWORDS = new Set([
   '관련',
@@ -95,8 +99,8 @@ function buildImageAltText(content, imageIndex) {
 }
 
 function buildSafeImagePrompt(prompt) {
-  // 이미지 안의 가짜 성분표·함량·브랜드 문구는 건강 정보로 오해될 수 있다.
-  // AI가 만든 장면 설명 뒤에 무문자·무라벨 조건을 항상 붙여 이런 위험을 줄인다.
+  // 분야와 관계없이 가짜 문구·브랜드·전후 비교가 이미지에 들어가면 정보로 오해될 수 있다.
+  // AI가 만든 장면 설명 뒤에 공통 안전 조건을 붙여 이런 위험을 줄인다.
   return `${String(prompt || '').trim()}\n\n${IMAGE_SAFETY_SUFFIX}`.trim();
 }
 
@@ -219,7 +223,7 @@ function selectInternalLinks(content, historyEntries, limit = INTERNAL_LINK_LIMI
     }
 
     const score = scoreInternalLinkCandidate(context, entry);
-    // "건강", "관리"처럼 흔한 말 하나만 겹친 글은 내부링크로 연결하지 않는다.
+    // "정보", "방법"처럼 흔한 말 하나만 겹친 글은 내부링크로 연결하지 않는다.
     if (score < 3) {
       continue;
     }
@@ -254,20 +258,11 @@ function appendInternalLinks(content, historyEntries, options = {}) {
 
   const body = String(content.body || '').trim();
   const block = renderInternalLinksBlock(links);
-  const disclaimerBlock = `\n\n---\n${DISCLAIMER}`;
-
-  if (body.endsWith(disclaimerBlock)) {
-    const bodyWithoutDisclaimer = body.slice(0, -disclaimerBlock.length).trimEnd();
-    return {
-      ...content,
-      body: `${bodyWithoutDisclaimer}${block}${disclaimerBlock}`,
-      internalLinks: links,
-    };
-  }
+  const separated = splitGeneratedDisclaimerBlock(body);
 
   return {
     ...content,
-    body: `${body}${block}`,
+    body: `${separated.body}${block}${renderDisclaimerBlock(separated.disclaimers)}`,
     internalLinks: links,
   };
 }
@@ -372,8 +367,12 @@ async function generateContent({ keyword, settings, workDir, onProgress, isCance
   }
 
   if (settings.publishDefaults.insertDisclaimer) {
-    // 건강 정보 글은 오해를 줄이기 위해 하단에 고지문을 붙일 수 있다.
-    body = `${body}\n\n---\n${DISCLAIMER}`;
+    // 일반 주제에는 고지문을 붙이지 않고 건강·금융·법률 주제에만 맞춤 안내를 붙인다.
+    body = appendSensitiveDisclaimers(body, {
+      keyword,
+      title: article.title,
+      body,
+    });
   }
 
   onProgress?.('done');

@@ -67,9 +67,14 @@ function buildValidYoutubeResponse(sceneCount = 4) {
 
 test('인스타 카드뉴스 응답은 카드 수와 텍스트 길이를 검증한다', () => {
   const parsed = instagramSchema.parseInstagramCarouselResponse(buildValidResponse(3), { cardCount: 3 });
+  const prompt = instagramSchema.buildSystemPrompt({ cardCount: 3 });
   assert.equal(parsed.cards.length, 3);
   assert.equal(parsed.tags.length, 5);
   assert.equal(parsed.title.includes('비타민B12'), true);
+  assert.match(prompt, /특정 콘텐츠 분야로 제한하지 마세요/);
+  assert.match(prompt, /건강·의료 주제/);
+  assert.match(prompt, /금융·투자 주제/);
+  assert.match(prompt, /법률 주제/);
 });
 
 test('카드 수 또는 중복 해시태그가 맞지 않으면 생성 결과를 거절한다', () => {
@@ -147,6 +152,8 @@ test('YouTube 대본은 영상 길이, 장면 수와 정책용 필드를 검증�
   assert.match(youtubeSchema.buildSystemPrompt(options), /반복 템플릿은 만들지 마세요/);
   assert.match(youtubeSchema.buildSystemPrompt(options), /실존 인물/);
   assert.match(youtubeSchema.buildSystemPrompt(options), /채널의 핵심 주제/);
+  assert.match(youtubeSchema.buildSystemPrompt(options), /영상 주제가 어떤 분야든 그대로 다루고/);
+  assert.match(youtubeSchema.buildSystemPrompt(options), /금융·투자 주제/);
   assert.match(
     youtubeSchema.buildUserPrompt({
       keyword: '아침 피로 생활 습관',
@@ -169,6 +176,27 @@ test('YouTube 대본은 영상 길이, 장면 수와 정책용 필드를 검증�
     }).config.aspectRatio,
     '16:9'
   );
+});
+
+test('세 플랫폼 입력 예시는 특정 콘텐츠 분야에 고정되지 않는다', () => {
+  const blogSource = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'blog', 'views', 'main.js'), 'utf8');
+  const instagramSource = fs.readFileSync(
+    path.join(__dirname, '..', 'frontend', 'creator', 'views', 'instagram.js'),
+    'utf8'
+  );
+  const youtubeSource = fs.readFileSync(
+    path.join(__dirname, '..', 'frontend', 'creator', 'views', 'youtube.js'),
+    'utf8'
+  );
+  const settingsSource = fs.readFileSync(
+    path.join(__dirname, '..', 'frontend', 'blog', 'views', 'settings.js'),
+    'utf8'
+  );
+
+  assert.match(blogSource, /초보 홈카페 원두 고르기/);
+  assert.match(instagramSource, /작은 집 수납 공간 정리 방법/);
+  assert.match(youtubeSource, /일상에서 바로 쓰는 디지털 활용법/);
+  assert.match(settingsSource, /민감 정보 주제에 맞춤 고지문 자동 삽입/);
 });
 
 test('YouTube 장면은 어절 보존, 안전 영역과 원본성 표시를 사용한다', () => {

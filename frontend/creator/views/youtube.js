@@ -276,7 +276,7 @@ export async function initYoutubeView(container) {
               id="youtube-channel-theme"
               type="text"
               maxlength="200"
-              placeholder="예: 직장인의 현실적인 건강 습관"
+              placeholder="예: 일상에서 바로 쓰는 디지털 활용법"
               aria-describedby="youtube-channel-theme-help youtube-profile-help"
             />
           </div>
@@ -287,7 +287,7 @@ export async function initYoutubeView(container) {
               id="youtube-target-audience"
               type="text"
               maxlength="200"
-              placeholder="예: 건강 습관을 만들고 싶은 30~50대 직장인"
+              placeholder="예: 스마트폰과 AI 도구를 쉽게 배우고 싶은 일반 사용자"
               aria-describedby="youtube-target-audience-help youtube-profile-help"
             />
           </div>
@@ -318,7 +318,7 @@ export async function initYoutubeView(container) {
             <textarea
               id="youtube-keyword"
               rows="4"
-              placeholder="예: 아침 피로를 줄이기 위해 확인할 생활 습관"
+              placeholder="예: 스마트폰 사진을 깔끔하게 정리하는 방법"
               aria-describedby="youtube-keyword-help youtube-recommend-note"
             ></textarea>
           </div>

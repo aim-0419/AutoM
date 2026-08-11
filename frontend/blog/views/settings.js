@@ -322,7 +322,7 @@ export async function initSettingsView(container) {
       <div class="hint">본문 품질과 가독성을 위해 2~4장으로 제한됩니다.</div>
       <div class="checkbox-row">
         <input type="checkbox" id="input-disclaimer" ${state.settings.publishDefaults.insertDisclaimer ? 'checked' : ''} />
-        <label for="input-disclaimer">글 하단에 건강 정보 고지문 자동 삽입</label>
+        <label for="input-disclaimer">민감 정보 주제에 맞춤 고지문 자동 삽입</label>
       </div>
     </div>
 

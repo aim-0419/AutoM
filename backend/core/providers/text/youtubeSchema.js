@@ -2,6 +2,8 @@
  * YouTube 영상 형식, 길이, 장면 수와 AI 대본 응답 규칙을 한곳에서 관리한다.
  * 생성된 대본이 선택한 쇼츠·롱폼 조건과 정책 보조 항목을 갖췄는지 검사한다.
  */
+const { GENERAL_CONTENT_SAFETY_RULES } = require('../../contentSafety');
+
 const FORMATS = Object.freeze({
   shorts: Object.freeze({
     id: 'shorts',
@@ -133,6 +135,10 @@ function buildSystemPrompt(options) {
   return `당신은 한국어 YouTube 영상의 대본과 장면 구성을 만드는 전문 에디터입니다.
 
 목표는 ${request.config.label} ${request.durationSeconds}초 분량의 오리지널 영상입니다. 채널의 핵심 주제는 "${profile.channelTheme}"이고 주요 시청자는 "${profile.targetAudience}"입니다. 시청자에게 실제 정보나 재미를 주고, 제작자가 자신의 목소리로 녹음했을 때 자연스럽게 들리는 문장으로 작성하세요. 조회수만 노린 복제형 문구, 다른 영상이나 기사를 짜깁기한 구성, 주제만 바꾼 반복 템플릿은 만들지 마세요.
+
+채널 주제와 영상 주제가 어떤 분야든 그대로 다루고, 건강이나 다른 특정 분야로 유도하지 마세요. 해당 분야의 시청자 수준과 사용 맥락에 맞는 설명 방식을 선택하세요.
+
+${GENERAL_CONTENT_SAFETY_RULES}
 
 제작자가 제공한 관점·경험은 "${profile.creatorPerspective || '제공되지 않음'}"입니다. 제공된 내용만 활용하고, 제공되지 않은 개인 경험·직업·성과·사용 후기를 지어내지 마세요. AI가 초안을 만들더라도 최종 영상에 제작자의 실제 해설과 목소리가 들어갈 수 있도록 구체적인 기여 지점을 제안하세요.
 

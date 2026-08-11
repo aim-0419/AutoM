@@ -11,6 +11,7 @@ const {
   MIN_HEADINGS,
   MAX_HEADINGS,
 } = require('./providers/text/articleSchema');
+const { detectSensitiveDomains, splitGeneratedDisclaimerBlock } = require('./contentSafety');
 
 /**
  * AI가 만든 글을 발행하기 전에 확인하는 "최종 품질 관문"이다.
@@ -20,7 +21,6 @@ const {
  * 콘텐츠가 반복되는 일을 줄인다.
  */
 const INTERNAL_LINK_HEADING = '함께 읽으면 좋은 글';
-const DISCLAIMER = '본 글은 일반적인 건강 정보 제공을 목적으로 하며, 의학적 진단이나 치료를 대체하지 않습니다.';
 // AI가 글자 수를 아주 조금 넘길 수 있어, 요청 상한의 15%까지는 허용한다.
 const MAX_BODY_CHARS = Math.ceil(DEFAULT_MAX_CHARS * 1.15);
 const MAX_INTERNAL_LINKS = 3;
@@ -77,7 +77,7 @@ function normalizeComparable(value) {
 function stripGeneratedAppendices(body) {
   // 고지문과 내부링크는 프로그램이 나중에 붙이는 부분이다.
   // 원래 AI가 쓴 본문만 비교해야 중복 검사 결과가 왜곡되지 않는다.
-  let result = String(body || '').replace(`\n\n---\n${DISCLAIMER}`, '');
+  let result = splitGeneratedDisclaimerBlock(body).body;
   const headingPattern = new RegExp(`\\n##\\s+${INTERNAL_LINK_HEADING.replace(/\s/g, '\\s+')}\\s*\\n`);
   const match = result.match(headingPattern);
   if (match?.index !== undefined) {
@@ -287,17 +287,45 @@ function auditContent(content, { historyEntries = [], strictTopicDuplicates = fa
     addError('invalid-internal-link', '관련 글 영역에는 네이버 블로그의 안전한 HTTPS 주소만 사용할 수 있습니다.');
   }
 
-  // 2단계: 건강 정보 글에서 위험한 과장 표현과 과도한 키워드 반복을 찾는다.
-  // 이런 표현은 독자 신뢰와 블로그 품질에 모두 좋지 않아 오류 또는 경고로 표시한다.
+  // 2단계: 분야와 관계없이 과장 표현을 찾고, 건강·금융·법률 주제에는 추가 안전 검사를 적용한다.
+  // 이런 표현은 독자 신뢰와 콘텐츠 품질에 좋지 않아 오류 또는 경고로 표시한다.
   const riskyText = `${title}\n${coreBody}`;
-  const overclaimPatterns = [
+  const sensitiveDomains = detectSensitiveDomains({
+    keyword: content?.keyword,
+    title,
+    body: coreBody,
+  });
+  const medicalOverclaimPatterns = [
     /(?:100\s*%|무조건|반드시).{0,12}(?:효과|개선|치료|완치)/i,
     /(?:완치|치료)\s*(?:됩니다|된다|할\s*수\s*있습니다)/i,
     /부작용(?:이|은)?\s*(?:전혀\s*)?없(?:습니다|다)/i,
     /특효약|만병통치/i,
   ];
-  if (overclaimPatterns.some((pattern) => pattern.test(riskyText))) {
+  const generalGuaranteePatterns = [
+    /(?:100\s*%|무조건|반드시).{0,12}(?:성공|합격|매출|판매|절약|개선|효과)/i,
+    /(?:결과|성과|효과)(?:를|가|은|는)?\s*(?:보장|확정)/i,
+  ];
+  if (sensitiveDomains.includes('health') && medicalOverclaimPatterns.some((pattern) => pattern.test(riskyText))) {
     addError('medical-overclaim', '치료·완치·효과를 단정하거나 오해를 부를 수 있는 표현이 감지되었습니다.');
+  } else if (generalGuaranteePatterns.some((pattern) => pattern.test(riskyText))) {
+    addError('guaranteed-outcome', '효과나 결과를 보장하는 과장 표현이 감지되었습니다.');
+  }
+
+  const financialOverclaimPatterns = [
+    /원금(?:이|은|을)?\s*(?:보장|손실\s*없)/i,
+    /(?:수익|수익률|대출\s*승인)(?:이|을|은|는)?\s*(?:보장|확정)/i,
+    /(?:무조건|반드시).{0,12}(?:오릅니다|상승|수익|승인)/i,
+  ];
+  if (sensitiveDomains.includes('finance') && financialOverclaimPatterns.some((pattern) => pattern.test(riskyText))) {
+    addError('financial-overclaim', '원금·수익·대출 결과를 보장하는 금융 표현이 감지되었습니다.');
+  }
+
+  const legalOverclaimPatterns = [
+    /(?:무조건|반드시).{0,12}(?:승소|무죄|처벌\s*없|합법)/i,
+    /(?:승소|무죄|합법)(?:가|이|을|은|는)?\s*(?:보장|확정)/i,
+  ];
+  if (sensitiveDomains.includes('legal') && legalOverclaimPatterns.some((pattern) => pattern.test(riskyText))) {
+    addError('legal-overclaim', '승소·처벌·합법 여부를 단정하는 법률 표현이 감지되었습니다.');
   }
 
   const salesPhrases = riskyText.match(/구매하세요|지금\s*바로|필수템|무조건\s*추천|최고의\s*제품/gi) || [];

@@ -8,7 +8,9 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const articleSchema = require('../backend/core/providers/text/articleSchema');
+const keywordSchema = require('../backend/core/providers/text/keywordSchema');
 const { toKoreanErrorMessage } = require('../backend/core/providers/errorMessage');
+const contentSafety = require('../backend/core/contentSafety');
 const contentQuality = require('../backend/core/contentQuality');
 const pipeline = require('../backend/core/pipeline');
 const schedule = require('../backend/core/schedule');
@@ -91,6 +93,42 @@ test('정상 SEO 구조는 스키마와 자동 품질 점검을 통과한다', (
     keywordMentions: 1,
     maxHistorySimilarity: 0,
   });
+});
+
+test('블로그와 키워드 추천은 분야를 제한하지 않고 민감 주제 안전 기준을 유지한다', () => {
+  const articlePrompt = articleSchema.buildSystemPrompt({
+    tone: articleSchema.DEFAULT_TONE,
+    minChars: articleSchema.DEFAULT_MIN_CHARS,
+    maxChars: articleSchema.DEFAULT_MAX_CHARS,
+  });
+  const keywordPrompt = keywordSchema.buildSystemPrompt();
+
+  assert.match(articlePrompt, /콘텐츠 분야를 제한하지 마세요/);
+  assert.doesNotMatch(articlePrompt, /건강 정보 콘텐츠를 작성하는 전문 카피라이터/);
+  assert.match(articlePrompt, /건강·의료 주제/);
+  assert.match(articlePrompt, /금융·투자 주제/);
+  assert.match(articlePrompt, /법률 주제/);
+  assert.match(keywordPrompt, /분야 제한 없이/);
+  assert.match(keywordPrompt, /건강, 여행, 음식, 교육, IT, 생활, 취미, 금융, 법률/);
+  assert.doesNotMatch(keywordSchema.buildUserPrompt({ count: 5, excludeKeywords: [] }), /건강 관련 블로그/);
+});
+
+test('일반 주제에는 고지문을 붙이지 않고 민감 주제에는 분야별 고지문을 적용한다', () => {
+  assert.deepEqual(contentSafety.getSensitiveDisclaimers({ keyword: '초보 홈카페 원두 고르기' }), []);
+
+  const health = contentSafety.getSensitiveDisclaimers({ keyword: '비타민D 복용 주의사항' });
+  const finance = contentSafety.getSensitiveDisclaimers({ keyword: '초보 주식 투자 위험 관리' });
+  const legal = contentSafety.getSensitiveDisclaimers({ keyword: '임대차 계약서 확인 방법' });
+  assert.match(health[0], /의학적 진단이나 치료/);
+  assert.match(finance[0], /투자·대출·세무 판단/);
+  assert.match(legal[0], /법률 자문/);
+
+  const appended = contentSafety.appendSensitiveDisclaimers('일반 본문', {
+    keyword: '주식 투자 계약서 확인',
+  });
+  const separated = contentSafety.splitGeneratedDisclaimerBlock(appended);
+  assert.equal(separated.body, '일반 본문');
+  assert.equal(separated.disclaimers.length, 2);
 });
 
 test('이미지 1장, 태그 부족, 소제목 부족 응답은 생성 단계에서 거부한다', () => {
@@ -185,6 +223,22 @@ test('과장 표현, 키워드 남용, 외부 링크, 동일 본문은 발행을
   const base = buildValidContent();
   const overclaim = contentQuality.auditContent({ ...base, body: `${base.body}\n\n이 제품은 100% 효과를 보장합니다.` });
   assert.ok(overclaim.errors.some((item) => item.code === 'medical-overclaim'));
+
+  const financialOverclaim = contentQuality.auditContent({
+    ...base,
+    keyword: '초보 주식 투자',
+    title: '초보 주식 투자 전에 확인할 현실적인 위험 관리 기준',
+    body: `${base.body}\n\n이 방법은 원금을 보장하고 수익을 확정합니다.`,
+  });
+  assert.ok(financialOverclaim.errors.some((item) => item.code === 'financial-overclaim'));
+
+  const legalOverclaim = contentQuality.auditContent({
+    ...base,
+    keyword: '임대차 법률 상담',
+    title: '임대차 법률 상담 전에 확인할 계약 분쟁 대응 기준',
+    body: `${base.body}\n\n이 방법을 따르면 반드시 승소합니다.`,
+  });
+  assert.ok(legalOverclaim.errors.some((item) => item.code === 'legal-overclaim'));
 
   const stuffed = contentQuality.auditContent({
     ...base,

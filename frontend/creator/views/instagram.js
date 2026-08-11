@@ -201,7 +201,7 @@ export async function initInstagramView(container) {
             <textarea
               id="instagram-keyword"
               rows="4"
-              placeholder="예: 비타민B12 부족 신호와 식단 관리"
+              placeholder="예: 작은 집 수납 공간 정리 방법"
               aria-describedby="instagram-keyword-help instagram-recommend-note"
             ></textarea>
           </div>
