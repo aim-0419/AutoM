@@ -1,14 +1,26 @@
 /**
- * 인스타그램 카드뉴스 AI 응답의 형식과 허용 길이를 정의한다.
- * 공급자가 달라도 화면과 생성 파이프라인은 이 규칙으로 같은 결과를 받는다.
+ * [인스타그램 카드뉴스 주문서 & 검수 규칙]
+ *
+ * 비개발자를 위한 설명:
+ * - 카드뉴스는 여러 장의 이미지를 옆으로 넘겨 보는 인스타그램 게시물입니다.
+ * - AI에게 요청해서 받는 내용은 아래 5가지입니다.
+ *     title       : 카드뉴스 전체 제목
+ *     cards       : 각 카드의 짧은 제목(headline) + 설명(body) + 배경 그림 설명(imagePrompt)
+ *     caption     : 게시물 본문 글
+ *     tags        : 해시태그 단어들
+ *     callToAction: "저장해두세요" 같은 마무리 권유 문장
+ * - 카드 위에 글자를 얹어야 하므로 글자 수 제한이 중요합니다.
+ *   제목이 너무 길면 카드 밖으로 넘치기 때문에 headline 6~34자, body 32~190자로 제한합니다.
+ * - 배경 그림에는 글자가 들어가면 안 됩니다(우리가 직접 글자를 얹기 때문).
+ *   그래서 AI에게 "그림 안에 글자·로고를 넣지 말라"고 지시합니다.
  */
 const { GENERAL_CONTENT_SAFETY_RULES } = require('../../contentSafety');
 
-const MIN_CARD_COUNT = 3;
-const MAX_CARD_COUNT = 10;
-const DEFAULT_CARD_COUNT = 5;
-const MIN_TAG_COUNT = 5;
-const MAX_TAG_COUNT = 15;
+const MIN_CARD_COUNT = 3; // 카드 최소 장수
+const MAX_CARD_COUNT = 10; // 카드 최대 장수 (인스타그램 한 게시물 제한)
+const DEFAULT_CARD_COUNT = 5; // 사용자가 고르지 않았을 때 기본 장수
+const MIN_TAG_COUNT = 5; // 해시태그 최소 개수
+const MAX_TAG_COUNT = 15; // 해시태그 최대 개수
 
 const RETRY_REMINDER =
   '직전 응답은 요청한 JSON 형식 또는 길이 조건을 충족하지 못했습니다. 설명이나 코드 블록 없이 JSON 객체 하나만 다시 출력하세요.';

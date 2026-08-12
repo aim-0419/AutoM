@@ -1,4 +1,17 @@
+/**
+ * [인스타그램 카드 만들기 화면]
+ *
+ * 비개발자를 위한 설명:
+ * - 사용 순서:
+ *     1) 주제와 카드 장수(3~10장)를 입력하고 '카드 만들기'를 누른다
+ *     2) 진행 상황이 단계별로 표시된다 (문구 작성 → 배경 생성 → 카드 합성)
+ *     3) 완성된 카드와 게시 문구를 화면에서 확인한다
+ *     4) 마음에 들면 '인스타그램에 발행' 버튼으로 바로 올리거나,
+ *        저장된 폴더에서 파일을 꺼내 직접 올린다
+ * - 실제 제작과 업로드는 프로그램 내부(백엔드)가 하고, 이 화면은 요청과 결과 표시만 담당합니다.
+ */
 function escapeHtml(value) {
+  // 사용자·AI가 만든 문구가 HTML 명령으로 잘못 해석되지 않도록 안전한 문자로 바꾼다.
   return String(value || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -7,6 +20,7 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+// 카드 '생성' 진행 단계를 사용자가 읽을 수 있는 문구로 바꾸는 표
 const STAGE_LABELS = {
   writing: '카드 내용 작성 중...',
   illustrating: '배경 이미지 생성 중...',
@@ -14,6 +28,7 @@ const STAGE_LABELS = {
   done: '카드 묶음 생성 완료',
 };
 
+// 인스타그램 '발행(업로드)' 진행 단계 문구
 const PUBLISH_STAGE_LABELS = {
   opening: '인스타그램 작성 화면 여는 중...',
   uploading: '카드 이미지 업로드 중...',
@@ -23,6 +38,10 @@ const PUBLISH_STAGE_LABELS = {
   published: '인스타그램 발행 완료',
 };
 
+/**
+ * 생성이 끝난 카드뉴스 결과를 화면에 보여준다.
+ * 저장 위치, 카드 미리보기, 게시 문구, 해시태그, 그리고 발행 버튼이 함께 표시된다.
+ */
 export function renderOutput(container, content) {
   const area = container.querySelector('#instagram-output');
   area.innerHTML = `
@@ -134,6 +153,13 @@ export function renderOutput(container, content) {
   });
 }
 
+/**
+ * [화면 그리기] 인스타그램 카드 만들기 화면 전체를 만든다.
+ *
+ * 구성: 제작 4단계 안내 → 계정 연결 상태 → 주제·카드 수 입력 →
+ *       카드 만들기 버튼 → 진행 상황 → 결과 영역
+ * 화면을 그린 뒤 로그인 상태를 확인해 표시하고, 각 버튼에 동작을 연결한다.
+ */
 export async function initInstagramView(container) {
   container.innerHTML = `
     <div class="instagram-layout creator-instagram-view">

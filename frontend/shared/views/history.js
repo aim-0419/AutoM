@@ -1,5 +1,19 @@
+/**
+ * [발행 기록 화면 '꾸미기' 담당 - 두 앱 공통]
+ *
+ * 비개발자를 위한 설명:
+ * - 기록 목록을 실제로 불러오는 일은 blog/views/history.js가 합니다.
+ *   이 파일은 그 위에 보기 편한 요소를 덧붙입니다.
+ *     · "현재 보기: 블로그 · 12건" 같은 요약 표시
+ *     · 성공/실패/예약을 색깔로 구분하는 상태 배지
+ *     · 긴 글자가 잘렸을 때 마우스를 올리면 전체가 보이는 툴팁
+ *     · 링크 이름을 '결과 열기'로 통일
+ * - Creator 앱은 블로그·인스타그램·유튜브 탭을 함께 보여주고(platformTabs: true),
+ *   블로그 전용 앱은 탭 없이 블로그 기록만 보여줍니다(platformTabs: false).
+ */
 import { initHistoryView } from '../../blog/views/history.js';
 
+// 플랫폼별 표시 이름과, 기록이 하나도 없을 때 보여줄 안내 문구
 const HISTORY_PLATFORMS = {
   blog: {
     label: '블로그',
@@ -15,6 +29,12 @@ const HISTORY_PLATFORMS = {
   },
 };
 
+/**
+ * 기록 표의 각 줄을 꾸민다.
+ *  · 열마다 이름표를 붙여 CSS가 너비를 조절할 수 있게 한다
+ *  · 글자가 길어 잘릴 수 있으므로 마우스를 올리면 전체 내용이 보이게 한다
+ *  · 상태(성공/실패/예약)에 따라 다른 색이 적용되도록 표시를 붙인다
+ */
 function decorateHistoryRows(container, platformId) {
   const platformLabel = HISTORY_PLATFORMS[platformId]?.label || '선택한 플랫폼';
   const cellClasses = [
@@ -100,6 +120,7 @@ function decorateHistoryView(container, { platformTabs }) {
   rows.setAttribute('aria-live', 'polite');
   empty.setAttribute('aria-live', 'polite');
 
+  // 플랫폼 탭을 바꿀 때마다 요약 문구와 줄 디자인을 다시 맞춰주는 함수
   const syncPresentation = () => {
     const activeTab =
       container.querySelector('.history-platform-tab.active') ||
@@ -128,6 +149,10 @@ function decorateHistoryView(container, { platformTabs }) {
   syncPresentation();
 }
 
+/**
+ * 기록 화면을 그린다.
+ * platformTabs가 true면 블로그·인스타·유튜브 탭을 함께 보여준다(Creator 앱).
+ */
 export async function initStyledHistoryView(container, { platformTabs = false } = {}) {
   await initHistoryView(container, { platformTabs, renderEmptyShell: true });
   decorateHistoryView(container, { platformTabs });

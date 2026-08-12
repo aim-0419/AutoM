@@ -1,6 +1,18 @@
 /**
- * 네이버 로그인 브라우저와 사용자 세션 폴더를 관리한다.
- * 아이디와 비밀번호를 코드에 저장하지 않고 Chromium의 로그인 상태만 재사용한다.
+ * [네이버 로그인 관리]
+ *
+ * 비개발자를 위한 설명:
+ * - 이 프로그램은 사용자의 네이버 아이디·비밀번호를 절대 저장하지 않습니다.
+ * - 대신 '자동화용 브라우저' 창을 띄워 사용자가 직접 로그인하게 하고,
+ *   로그인 후 브라우저에 남는 흔적(쿠키)만 전용 폴더에 보관합니다.
+ *   → 실제 크롬에서 한 번 로그인하면 다음부터 자동 로그인되는 것과 같은 원리입니다.
+ * - 덕분에 캡차나 2단계 인증도 사용자가 직접 처리할 수 있고,
+ *   프로그램은 비밀번호를 알 필요가 없습니다.
+ *
+ * 용어:
+ * - Playwright : 브라우저를 프로그램이 대신 조작하게 해주는 자동화 도구
+ * - Chromium   : 크롬의 기반이 되는 브라우저. 이 프로그램에 함께 들어 있습니다.
+ * - 세션/쿠키   : 로그인 상태를 기억하는 데이터
  */
 const fs = require('node:fs');
 const path = require('node:path');
@@ -13,8 +25,13 @@ function getProfileDir() {
   return path.join(app.getPath('userData'), 'naver-profile');
 }
 
+/**
+ * 로그인 상태가 유지되는 브라우저를 연다.
+ * 'persistent(지속)'는 창을 닫아도 로그인 정보가 폴더에 남는다는 뜻이다.
+ */
 async function launchPersistentContext() {
   // headless: false는 실제 로그인/발행 과정을 사용자가 볼 수 있는 브라우저 창으로 연다는 뜻이다.
+  // (headless: true였다면 화면 없이 뒤에서 조용히 실행되어, 사용자가 로그인할 수 없다)
   return chromium.launchPersistentContext(getProfileDir(), {
     headless: false,
     viewport: { width: 1280, height: 900 },
@@ -22,9 +39,15 @@ async function launchPersistentContext() {
 }
 
 /**
- * 실제로 로그인이 필요한 페이지(블로그 글쓰기)에 접근해 리다이렉트 여부로 로그인 상태를 판단한다.
+ * 지금 로그인되어 있는지 확인한다.
+ *
+ * 확인 방법: 로그인해야만 볼 수 있는 '글쓰기' 페이지에 들어가 본다.
+ *  - 그대로 열리면 → 로그인 상태
+ *  - 로그인 페이지(nid.naver.com)로 튕겨나가면 → 로그아웃 상태
+ *
+ * 왜 쿠키를 직접 확인하지 않나요?
  * 쿠키 이름은 네이버 쪽에서 자주 바뀌므로(2026-07-08 확인 시 NID_JST는 로그인 여부와 무관하게
- * 항상 존재해 신뢰할 수 없었다) 신뢰하지 않는다.
+ * 항상 존재해 신뢰할 수 없었다) 신뢰하지 않는다. 실제로 들어가 보는 방식이 가장 확실하다.
  */
 async function isLoggedIn(context, blogId) {
   const page = await context.newPage();
@@ -42,8 +65,15 @@ async function isLoggedIn(context, blogId) {
 }
 
 /**
- * persistent context 창을 띄워 사용자가 직접 로그인(캡차·기기확인 포함)하게 하고,
- * 로그인 완료(= nid.naver.com 밖으로 리다이렉트)가 감지되면 자동으로 창을 닫는다.
+ * 로그인 창을 띄우고, 사용자가 로그인을 마칠 때까지 기다린다.
+ *
+ * 동작:
+ *  1) 네이버 로그인 페이지를 브라우저 창으로 연다.
+ *  2) '로그인 상태 유지' 체크박스를 미리 켠다.
+ *  3) 1초마다 주소를 확인하며 로그인 완료를 기다린다 (최대 5분).
+ *  4) 완료되면 창을 자동으로 닫는다. 사용자가 먼저 창을 닫으면 로그인 실패로 처리한다.
+ *
+ * 캡차나 휴대폰 인증이 나와도 사용자가 직접 처리하면 되므로 문제가 없다.
  */
 async function login() {
   const context = await launchPersistentContext();

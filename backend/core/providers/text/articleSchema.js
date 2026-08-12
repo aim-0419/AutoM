@@ -1,25 +1,41 @@
 /**
- * 어떤 텍스트 AI를 선택해도 같은 형식의 블로그 글을 받도록 만드는 공통 규칙이다.
- * AI에게 줄 작성 지시문과, 돌아온 답변의 형식 검사를 한곳에서 관리한다.
+ * [블로그 글 주문서 & 검수 규칙]
+ *
+ * 비개발자를 위한 설명:
+ * - AI에게 글을 부탁할 때는 "이런 형식으로, 이런 규칙을 지켜서 써 달라"는 상세한 주문서가 필요합니다.
+ *   이 파일이 그 주문서(프롬프트)를 만들고, 돌아온 결과물이 주문대로인지 검수합니다.
+ * - Claude·ChatGPT·Gemini 중 무엇을 쓰든 이 파일의 같은 주문서를 사용하기 때문에,
+ *   AI를 바꿔도 결과물의 형식과 품질 기준이 동일하게 유지됩니다.
+ * - AI는 가끔 형식을 틀리게 답합니다. 그래서 결과를 무조건 믿지 않고
+ *   제목 길이·소제목 개수·이미지 표시 순서·태그 수를 전부 확인한 뒤,
+ *   틀렸으면 "이 부분이 틀렸다"고 알려주며 딱 한 번 더 요청합니다.
+ *
+ * 용어:
+ * - 프롬프트(prompt) : AI에게 보내는 지시문
+ * - 시스템 프롬프트   : 역할과 규칙을 정하는 지시문 (매번 동일)
+ * - 유저 프롬프트     : 이번에 처리할 실제 요청 (키워드 등, 매번 다름)
+ * - JSON             : 컴퓨터가 읽기 쉬운 데이터 표기법. AI에게 이 형식으로 답하라고 요구한다.
  */
 const { GENERAL_CONTENT_SAFETY_RULES } = require('../../contentSafety');
 
 const DEFAULT_TONE = '친근하고 신뢰감 있는 정보성 말투';
-const DEFAULT_MIN_CHARS = 1800;
-const DEFAULT_MAX_CHARS = 2800;
+const DEFAULT_MIN_CHARS = 1800; // 본문 최소 글자 수
+const DEFAULT_MAX_CHARS = 2800; // 본문 최대 글자 수
 
+// AI가 형식을 틀렸을 때 다시 요청하며 덧붙이는 문장이다.
 const RETRY_REMINDER =
   '이전 응답은 유효한 JSON이 아니었습니다. 설명이나 코드펜스 없이, 요청한 형식의 JSON 객체 하나만 출력하세요.';
 
-const MAX_TITLE_CHARS = 40;
-const MIN_TITLE_CHARS = 20;
-const MAX_TAGS = 8;
-const MIN_TAGS = 5;
-const MIN_IMAGE_MARKERS = 2;
-const MAX_IMAGE_MARKERS = 4;
-const MIN_HEADINGS = 2;
-const MAX_HEADINGS = 4;
-const MAX_BODY_OVERAGE_RATIO = 1.15;
+// 아래 숫자들이 '합격 기준'이다. 품질 검사(contentQuality.js)도 같은 값을 가져다 쓴다.
+const MAX_TITLE_CHARS = 40; // 제목 최대 글자 수
+const MIN_TITLE_CHARS = 20; // 제목 최소 글자 수
+const MAX_TAGS = 8; // 태그 최대 개수
+const MIN_TAGS = 5; // 태그 최소 개수
+const MIN_IMAGE_MARKERS = 2; // 본문에 넣을 이미지 최소 개수
+const MAX_IMAGE_MARKERS = 4; // 본문에 넣을 이미지 최대 개수
+const MIN_HEADINGS = 2; // 소제목(##) 최소 개수
+const MAX_HEADINGS = 4; // 소제목(##) 최대 개수
+const MAX_BODY_OVERAGE_RATIO = 1.15; // 글자 수 초과 허용치 (최대치의 115%까지는 통과)
 
 function buildSystemPrompt({ tone, minChars, maxChars }) {
   // AI에게 범용 콘텐츠 역할, 분야별 안전 기준, SEO 문서 구성, 반환 형식을 한 번에 전달한다.
@@ -146,6 +162,13 @@ function validateImageMarkers(body, imagePrompts) {
   }
 }
 
+/**
+ * [검수 함수] AI가 보내온 답변을 검사하고 프로그램이 쓸 수 있는 형태로 정리한다.
+ *
+ * 검사 순서: JSON으로 읽히는가 → 4개 항목(title/body/imagePrompts/tags)이 다 있는가 →
+ *            이미지 표시와 설명이 1:1로 맞는가 → 제목 길이 → 소제목 개수 → 본문 길이 → 태그 개수
+ * 하나라도 어긋나면 오류를 내고, 호출한 쪽에서 AI에게 다시 요청한다.
+ */
 function parseArticleResponse(rawText, { minChars, maxChars } = {}) {
   // AI의 답변을 믿고 바로 발행하지 않는다.
   // JSON 구조, 제목·본문 길이, 소제목, 이미지 위치, 태그를 모두 확인한 뒤 표준 결과로 바꾼다.
@@ -215,8 +238,11 @@ function parseArticleResponse(rawText, { minChars, maxChars } = {}) {
 }
 
 /**
- * AI 응답 형식이 깨졌을 때만 한 번 더 요청한다.
- * 무한 재시도로 비용이 계속 늘어나는 일을 막기 위해 최대 두 번만 시도한다.
+ * AI 응답 형식이 깨졌을 때만 한 번 더 요청한다. (총 2회까지)
+ *
+ * 왜 2번만 하나요?
+ * - AI 요청은 한 번마다 요금이 발생합니다. 계속 재시도하면 비용이 무한정 늘어납니다.
+ * - 두 번째 요청에는 "무엇이 틀렸는지"를 함께 알려주기 때문에 대부분 여기서 성공합니다.
  */
 async function generateArticleWithRetry(callOnce, validationOptions = {}) {
   let lastError;

@@ -1,6 +1,30 @@
 /**
- * YouTube용 대본, 장면 이미지, 자막과 무음 WebM 초안을 생성한다.
- * 자동 업로드는 하지 않으며 사용자가 편집·녹음할 수 있는 로컬 파일을 만든다.
+ * [유튜브 영상 초안 제작 공정]
+ *
+ * 비개발자를 위한 설명:
+ * - 키워드 하나로 유튜브 영상의 '초안 한 세트'를 만듭니다. 자동 업로드는 하지 않습니다.
+ *   (직접 목소리를 녹음하고 편집해서 올리는 것을 전제로 한 재료 모음입니다)
+ *
+ * - 만드는 순서:
+ *     1) 글쓰기 AI에게 제목·설명·장면별 대본을 받는다.          (stage: writing)
+ *     2) 이미지 AI에게 장면마다 배경 그림을 만든다. (2장씩 동시) (stage: illustrating)
+ *     3) 배경 위에 화면 문구를 얹어 장면 이미지를 완성한다.      (stage: rendering)
+ *     4) 장면 이미지들을 이어 붙여 소리 없는 영상 파일을 만든다. (stage: encoding)
+ *     5) 대본·자막·설명문·업로드 체크리스트를 파일로 저장한다.   (stage: done)
+ *
+ * - 결과 폴더에 생기는 파일들:
+ *     shorts.webm / longform.webm : 소리 없는 영상 초안 (여기에 목소리를 입히면 됩니다)
+ *     script.txt         : 시간대별 대본
+ *     captions.srt       : 자막 파일 (유튜브에 그대로 올릴 수 있는 표준 형식)
+ *     metadata.txt       : 유튜브에 붙여넣을 제목·설명
+ *     upload-checklist.txt: 업로드 전 직접 확인해야 할 항목 목록
+ *     channel-review.txt : 채널 방향성 점검 결과
+ *     thumbnail.jpg      : 첫 장면으로 만든 썸네일 후보
+ *     project.json       : 위 모든 정보를 담은 데이터 파일
+ *
+ * - 왜 자동 업로드를 하지 않나요?
+ *   유튜브는 AI로만 만든 반복 콘텐츠에 엄격합니다. 그래서 이 프로그램은 '재료'까지만 만들고,
+ *   본인의 목소리·해설·경험을 더하도록 안내합니다. 그 안내가 upload-checklist.txt입니다.
  */
 const fs = require('node:fs');
 const path = require('node:path');
@@ -15,10 +39,12 @@ const { resolveConfiguredProvider } = require('../../core/providers/configuredPr
 const { mapWithConcurrency } = require('../../core/concurrency');
 const youtubeSchema = require('../../core/providers/text/youtubeSchema');
 
-const IMAGE_GENERATION_CONCURRENCY = 2;
-const VIDEO_FPS = 24;
+const IMAGE_GENERATION_CONCURRENCY = 2; // 배경 그림을 한 번에 2장씩 생성
+const VIDEO_FPS = 24; // 영상의 초당 화면 수 (일반 영화와 같은 부드러움)
+// 유튜브 설명란에 자동으로 넣는 AI 사용 고지 문구. 시청자에 대한 투명성 확보용이다.
 const AI_VISUAL_DISCLOSURE = '※ 일부 시각 자료는 AI로 제작되었습니다.';
 
+/** 주제가 1~120자인지 확인하고 공백을 정리한다. */
 function validateKeyword(keyword) {
   const value = String(keyword || '').normalize('NFKC').replace(/\s+/g, ' ').trim();
   if (!value || [...value].length > 120) {
@@ -27,6 +53,10 @@ function validateKeyword(keyword) {
   return value;
 }
 
+/**
+ * 두 문장이 '사실상 같은지' 비교하기 위해 형태를 통일한다.
+ * 띄어쓰기·기호·대소문자를 모두 없애서, "AI 활용법"과 "ai활용법"을 같은 것으로 본다.
+ */
 function normalizeComparableText(value) {
   return String(value || '')
     .normalize('NFKC')
@@ -34,12 +64,17 @@ function normalizeComparableText(value) {
     .replace(/[^0-9a-z가-힣]+/g, '');
 }
 
+/** 최근 만든 영상 중 특정 항목(주제/제목/관점)이 완전히 같은 것이 있는지 찾는다. */
 function findExactDuplicate(value, recentProjects, field) {
   const normalized = normalizeComparableText(value);
   if (!normalized) return null;
   return recentProjects.find((item) => normalizeComparableText(item?.[field]) === normalized) || null;
 }
 
+/**
+ * 최근에 같은 주제로 영상을 만든 적이 있으면 시작 전에 중단한다.
+ * 비슷한 영상이 반복되면 채널이 '대량 생산 콘텐츠'로 평가받아 불이익을 받을 수 있기 때문이다.
+ */
 function assertUniqueTopic(keyword, recentProjects) {
   const duplicate = findExactDuplicate(keyword, recentProjects, 'keyword');
   if (duplicate) {
@@ -49,6 +84,13 @@ function assertUniqueTopic(keyword, recentProjects) {
   }
 }
 
+/**
+ * 제목이 약속한 내용이 실제 대본에 들어 있는지 점수(0~1)로 계산한다.
+ *
+ * 방법: 제목에서 핵심 단어를 뽑고, 그 단어들이 설명·대본에 실제로 나오는 비율을 센다.
+ * 왜 필요한가요? 제목은 자극적인데 내용은 다른 '낚시 영상'이 되지 않게 하기 위해서다.
+ * 점수가 0.5 미만이면 "직접 확인하세요"라고 안내한다.
+ */
 function calculateMetadataAlignment(project) {
   const stopWords = new Set(['위해', '먼저', '하는', '방법', '영상', '확인', '정리']);
   const titleTerms = (String(project.title || '').match(/[0-9a-z가-힣]{2,}/gi) || [])
@@ -62,6 +104,20 @@ function calculateMetadataAlignment(project) {
   return matched / titleTerms.length;
 }
 
+/**
+ * [채널 검토 보고서] 이 영상이 채널 운영에 문제가 없는지 점검한 결과를 만든다.
+ *
+ * 먼저 아래 두 가지는 발견 즉시 생성을 '중단'한다.
+ *   · 최근 영상과 제목 또는 고유 관점이 완전히 같은 경우
+ *   · 제목에 "100%", "무조건", "충격", "안 보면 손해" 같은 과장·낚시 표현이 있는 경우
+ *
+ * 나머지는 8개 항목의 점검표로 만들어 결과 폴더에 저장한다. 각 항목의 상태는 세 가지다.
+ *   pass   : 프로그램이 자동으로 확인 완료
+ *   action : 사용자가 손봐야 할 부분 (예: 본인의 해설 추가)
+ *   manual : 프로그램이 알 수 없어 사용자가 직접 확인해야 함 (예: 실제 채널의 최근 영상 비교)
+ *
+ * ※ 이 검토는 보조 도구일 뿐, 유튜브의 수익 창출 승인이나 정책 통과를 보장하지 않는다.
+ */
 function buildAuthenticityReport(project, profile, recentProjects) {
   const duplicateTitle = findExactDuplicate(project.title, recentProjects, 'title');
   const duplicateAngle = findExactDuplicate(project.originalAngle, recentProjects, 'originalAngle');
@@ -160,6 +216,15 @@ function toDataUri(imagePath) {
   return `data:${mimeType};base64,${fs.readFileSync(imagePath).toString('base64')}`;
 }
 
+/**
+ * 장면 배경 그림을 만들기 위한 지시문(영어)을 조립한다.
+ *
+ * 반드시 넣는 금지 조건들:
+ *  · 실존 인물, 실제 사건, 저작권 캐릭터, 알아볼 수 있는 브랜드 제품을 그리지 말 것
+ *  · 읽을 수 있는 글자·숫자·로고·워터마크를 넣지 말 것 (글자는 우리가 직접 얹는다)
+ *  · 의학·금융·법률 결과를 보장하는 듯한 표현을 넣지 말 것
+ * → 저작권 문제와 허위 정보 위험을 미리 차단하기 위한 조치다.
+ */
 function buildSceneImagePrompt(scene, request) {
   return [
     `Create an original stylized editorial illustration for a Korean YouTube ${request.format} video.`,
@@ -172,6 +237,13 @@ function buildSceneImagePrompt(scene, request) {
   ].join(' ');
 }
 
+/**
+ * 장면 한 컷의 화면을 웹페이지(HTML)로 그린다. 이 페이지를 캡처하면 영상의 한 장면이 된다.
+ *
+ * 화면 구성: 배경 그림 위에 어두운 막 → 상단에 형식/장면 번호 → 하단에 큰 화면 문구
+ * 쇼츠(세로)와 롱폼(가로)은 화면 비율이 달라 글자 크기와 여백을 각각 다르게 계산한다.
+ * 중요한 내용은 화면 가운데 쪽에 배치해, 휴대폰에서 잘려도 보이도록 한다.
+ */
 function renderSceneHtml({ project, scene, request, backgroundDataUri }) {
   const isShorts = request.format === 'shorts';
   const displayText = scene.index === 1 ? project.title : scene.onScreenText;
@@ -263,6 +335,12 @@ async function renderScenes(project, request, workDir, onProgress) {
   }
 }
 
+// ── 영상 만들기(인코딩) 관련 ─────────────────────────────────────
+// FFmpeg는 이미지들을 이어 붙여 동영상 파일로 만들어 주는 표준 도구입니다.
+// 별도로 설치하지 않아도 되도록, 프로그램에 함께 들어 있는 것을 찾아서 사용합니다.
+// 아래 세 함수는 "그 도구가 어느 폴더에 있는지" 찾아내는 역할을 합니다.
+
+/** 프로그램에 포함된 FFmpeg의 버전 번호를 확인한다. (폴더 이름에 버전이 들어가기 때문) */
 function getFfmpegRevision() {
   const packageRoot = path.dirname(require.resolve('playwright-core/package.json'));
   const registry = JSON.parse(fs.readFileSync(path.join(packageRoot, 'browsers.json'), 'utf8'));
@@ -271,6 +349,7 @@ function getFfmpegRevision() {
   return descriptor.revision;
 }
 
+/** 브라우저와 FFmpeg가 설치된 최상위 폴더를 찾는다. (개발 중과 설치본의 위치가 다르다) */
 function getPlaywrightBrowserRoot() {
   if (process.env.PLAYWRIGHT_BROWSERS_PATH && process.env.PLAYWRIGHT_BROWSERS_PATH !== '0') {
     return path.resolve(process.env.PLAYWRIGHT_BROWSERS_PATH);
@@ -278,6 +357,7 @@ function getPlaywrightBrowserRoot() {
   return path.dirname(path.dirname(path.dirname(chromium.executablePath())));
 }
 
+/** FFmpeg 실행 파일의 정확한 경로를 돌려준다. 없으면 재설치를 안내한다. */
 function getFfmpegExecutablePath() {
   const revision = getFfmpegRevision();
   const executableName = process.platform === 'win32' ? 'ffmpeg-win64.exe' : 'ffmpeg-linux';
@@ -288,12 +368,24 @@ function getFfmpegExecutablePath() {
   return executablePath;
 }
 
+/**
+ * 장면 이미지들을 이어 붙여 소리 없는 영상 파일(.webm)을 만든다.
+ *
+ * 비개발자를 위한 설명:
+ * - 예를 들어 장면 6개로 60초 영상을 만든다면, 한 장면당 10초씩 화면에 머무릅니다.
+ *   아래 `inputFrameRate`가 그 계산(장면 수 ÷ 영상 길이)입니다.
+ * - 이미지를 임시 파일로 저장했다가 읽는 대신, 메모리에서 FFmpeg에 바로 흘려보냅니다(pipe).
+ *   디스크를 거치지 않아 더 빠르고 찌꺼기 파일도 남지 않습니다.
+ * - 소리는 넣지 않습니다(-an). 사용자가 직접 목소리를 녹음해 입히는 것을 전제로 하기 때문입니다.
+ * - 마지막에 파일이 실제로 만들어졌고 크기가 정상인지(2KB 이상) 확인합니다.
+ */
 async function encodeVideo({ framePaths, durationSeconds, outputPath, onProgress }) {
   if (!Array.isArray(framePaths) || framePaths.length < 2) {
     throw new Error('영상을 만들려면 장면 이미지가 2장 이상 필요합니다.');
   }
 
   const ffmpegPath = getFfmpegExecutablePath();
+  // 장면 수 ÷ 영상 길이 = 초당 몇 장면을 보여줄지. 예) 6장면 / 60초 → 장면당 10초
   const inputFrameRate = `${framePaths.length}/${durationSeconds}`;
   const child = spawn(
     ffmpegPath,
@@ -360,6 +452,11 @@ async function encodeVideo({ framePaths, durationSeconds, outputPath, onProgress
   return outputPath;
 }
 
+/**
+ * 각 장면이 영상의 몇 초부터 몇 초까지인지 계산해 붙인다.
+ * 전체 길이를 장면 수로 똑같이 나눈다. 이 값은 자막 파일(.srt)의 타이밍이 된다.
+ * 예) 60초 영상 / 장면 4개 → 0~15초, 15~30초, 30~45초, 45~60초
+ */
 function attachTimings(scenes, durationSeconds) {
   return scenes.map((scene, index) => {
     const startSeconds = (durationSeconds * index) / scenes.length;
@@ -368,6 +465,10 @@ function attachTimings(scenes, durationSeconds) {
   });
 }
 
+/**
+ * 초를 시:분:초.밀리초 형태의 시간 표기로 바꾼다. (예: 75.5 → 00:01:15.500)
+ * 자막 파일(.srt)은 소수점 대신 쉼표를 쓰는 규칙이 있어 srt: true일 때 구분자를 바꾼다.
+ */
 function formatClock(seconds, { srt = false } = {}) {
   const totalMilliseconds = Math.round(seconds * 1000);
   const hours = Math.floor(totalMilliseconds / 3600000);
@@ -378,6 +479,7 @@ function formatClock(seconds, { srt = false } = {}) {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}${separator}${String(milliseconds).padStart(3, '0')}`;
 }
 
+/** 녹음할 때 보고 읽을 대본(script.txt) 내용을 만든다. 장면별 시간과 대사가 함께 적힌다. */
 function buildScriptText(project, request) {
   const lines = [
     project.title,
@@ -399,6 +501,10 @@ function buildScriptText(project, request) {
   return lines.join('\n').trim();
 }
 
+/**
+ * 자막 파일(.srt) 내용을 만든다. SRT는 유튜브를 포함해 대부분의 영상 도구가 읽는 표준 형식이다.
+ * 형식: 번호 → 시작시각 --> 끝시각 → 자막 내용 (빈 줄로 구분)
+ */
 function buildSrtText(scenes) {
   return scenes
     .map(
@@ -408,10 +514,16 @@ function buildSrtText(scenes) {
     .join('\n\n');
 }
 
+/** 유튜브 설명란에 넣을 글을 만든다. 설명 + AI 사용 고지 + 해시태그 순서다. */
 function buildDescriptionText(project) {
   return `${project.description}\n\n${AI_VISUAL_DISCLOSURE}\n\n${project.tags.map((tag) => `#${tag}`).join(' ')}`;
 }
 
+/**
+ * 결과 폴더에 사용자가 쓸 파일들을 모두 저장한다.
+ * (대본 / 자막 / 제목·설명 / 업로드 체크리스트 / 채널 검토서 / 썸네일 / 전체 데이터)
+ * 썸네일은 첫 번째 장면 이미지를 복사해 만든다.
+ */
 function writeProjectFiles(workDir, content, request) {
   const scriptText = buildScriptText(content, request);
   const srtText = buildSrtText(content.scenes);
@@ -531,6 +643,10 @@ function writeProjectFiles(workDir, content, request) {
   };
 }
 
+/**
+ * [메인 함수] 키워드 하나로 유튜브 영상 초안 한 세트를 완성한다.
+ * 화면의 '영상 만들기' 버튼이 최종적으로 실행하는 기능이다.
+ */
 async function generateYoutubeProject({
   keyword,
   format,

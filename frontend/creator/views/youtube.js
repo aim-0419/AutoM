@@ -1,6 +1,17 @@
 /**
- * YouTube 채널 정보와 영상 조건을 입력받고 생성 결과를 미리 보여 주는 화면이다.
- * 실제 파일 생성은 preload를 거쳐 백엔드 YouTube 기능에 요청한다.
+ * [유튜브 콘텐츠 만들기 화면]
+ *
+ * 비개발자를 위한 설명:
+ * - 사용 순서:
+ *     1) 채널 정보를 입력한다 (채널 주제 / 주 시청자 / 화자 관점)
+ *        → 한 번 입력하면 저장되어 다음부터는 자동으로 채워집니다.
+ *     2) 영상 주제와 형식(쇼츠/롱폼), 길이, 장면 수를 고른다
+ *     3) '영상 만들기'를 누르면 단계별 진행 상황이 표시된다
+ *     4) 완성되면 영상 미리보기, 대본, 자막, 업로드 체크리스트를 확인한다
+ *     5) '결과 폴더 열기'로 파일을 꺼내 편집하고, 직접 유튜브에 올린다
+ *
+ * - 이 프로그램은 유튜브에 자동 업로드하지 않습니다.
+ *   본인의 목소리와 해설을 더해 올리는 것을 전제로, '재료'까지만 만들어 줍니다.
  */
 function escapeHtml(value) {
   return String(value || '')
@@ -11,6 +22,12 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+/**
+ * 영상 형식별로 고를 수 있는 길이와 장면 수 목록이다.
+ * defaults는 "이 길이를 고르면 장면 수는 대개 이 정도가 적당하다"는 추천값으로,
+ * 길이를 바꾸면 장면 수가 자동으로 이 값으로 맞춰진다. (사용자가 바꿀 수 있음)
+ * 예) 60초 쇼츠 → 장면 8개 → 장면당 약 7.5초
+ */
 const FORMAT_OPTIONS = {
   shorts: {
     durations: [
@@ -34,6 +51,7 @@ const FORMAT_OPTIONS = {
   },
 };
 
+// 진행 단계를 사용자가 읽을 수 있는 문구로 바꾸는 표
 const STAGE_LABELS = {
   writing: '대본과 장면 구성 작성 중...',
   illustrating: '장면 이미지 생성 중...',
@@ -42,6 +60,7 @@ const STAGE_LABELS = {
   done: 'YouTube 프로젝트 생성 완료',
 };
 
+/** 초를 읽기 쉬운 문구로 바꾼다. (예: 90 → "1분 30초", 45 → "45초") */
 function formatDuration(seconds) {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
@@ -49,6 +68,11 @@ function formatDuration(seconds) {
   return remainingSeconds ? `${minutes}분 ${remainingSeconds}초` : `${minutes}분`;
 }
 
+/**
+ * 생성이 끝난 유튜브 프로젝트 결과를 화면에 보여준다.
+ * 영상 미리보기, 제목·설명, 채널 검토 결과, 장면별 대본, 업로드 안내가 함께 표시되고,
+ * '결과 폴더 열기', 'CapCut으로 편집', '유튜브 업로드 페이지 열기' 버튼이 제공된다.
+ */
 export function renderYoutubeOutput(container, content) {
   const output = container.querySelector('#youtube-output');
   const authenticityReport = content.authenticityReport || { comparedRecentCount: 0, checks: [], notice: '' };
@@ -224,6 +248,14 @@ export function renderYoutubeOutput(container, content) {
   });
 }
 
+/**
+ * [화면 그리기] 유튜브 콘텐츠 만들기 화면 전체를 만든다.
+ *
+ * 구성: 제작 단계 안내 → 채널 정보 입력 → 영상 조건 선택 →
+ *       영상 만들기 버튼 → 진행 상황 → 결과 영역
+ * 저장된 채널 정보를 불러와 입력칸을 미리 채우고, 형식·길이 변경 시
+ * 선택 가능한 장면 수를 자동으로 다시 계산한다.
+ */
 export async function initYoutubeView(container) {
   container.innerHTML = `
     <div class="youtube-layout creator-youtube-view">

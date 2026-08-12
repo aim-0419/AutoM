@@ -1,35 +1,45 @@
 /**
- * YouTube 영상 형식, 길이, 장면 수와 AI 대본 응답 규칙을 한곳에서 관리한다.
- * 생성된 대본이 선택한 쇼츠·롱폼 조건과 정책 보조 항목을 갖췄는지 검사한다.
+ * [유튜브 영상 기획 주문서 & 검수 규칙]
+ *
+ * 비개발자를 위한 설명:
+ * - 영상은 '장면(scene)'을 여러 개 이어 붙여 만듭니다. 각 장면마다 화면에 보일 그림,
+ *   말할 내용(내레이션), 화면에 띄울 자막이 필요합니다.
+ * - AI에게 한 번에 요청해서 제목·설명·해시태그·장면 목록을 통째로 받아옵니다.
+ * - 영상 종류는 두 가지이며, 종류에 따라 화면 비율과 장면 수가 달라집니다.
+ *     쇼츠(shorts)  : 세로 영상(9:16, 1080x1920). 30초~3분. 장면 4~12개.
+ *     롱폼(longform): 가로 영상(16:9, 1920x1080). 3~8분. 장면 6~16개.
  */
 const { GENERAL_CONTENT_SAFETY_RULES } = require('../../contentSafety');
 
+// 두 영상 형식의 규격표. Object.freeze는 실행 중에 이 값이 바뀌지 못하도록 잠그는 장치다.
 const FORMATS = Object.freeze({
   shorts: Object.freeze({
     id: 'shorts',
     label: '쇼츠',
-    aspectRatio: '9:16',
+    aspectRatio: '9:16', // 세로로 긴 화면 (휴대폰 전체 화면)
     width: 1080,
     height: 1920,
-    durations: Object.freeze([30, 45, 60, 90, 180]),
-    minScenes: 4,
-    maxScenes: 12,
+    durations: Object.freeze([30, 45, 60, 90, 180]), // 선택 가능한 영상 길이(초)
+    minScenes: 4, // 최소 장면 수
+    maxScenes: 12, // 최대 장면 수
   }),
   longform: Object.freeze({
     id: 'longform',
     label: '롱폼',
-    aspectRatio: '16:9',
+    aspectRatio: '16:9', // 가로로 긴 화면 (일반 유튜브 영상)
     width: 1920,
     height: 1080,
-    durations: Object.freeze([180, 300, 480]),
+    durations: Object.freeze([180, 300, 480]), // 3분 / 5분 / 8분
     minScenes: 6,
     maxScenes: 16,
   }),
 });
 
+// 영상의 전개 방식. educational=설명형, problem-solving=문제해결형,
+// comparison=비교형, story=이야기형
 const CONTENT_STYLES = Object.freeze(['educational', 'problem-solving', 'comparison', 'story']);
-const MIN_TAG_COUNT = 5;
-const MAX_TAG_COUNT = 15;
+const MIN_TAG_COUNT = 5; // 해시태그 최소 개수
+const MAX_TAG_COUNT = 15; // 해시태그 최대 개수
 const RETRY_REMINDER =
   '직전 응답은 YouTube JSON 형식, 장면 수 또는 대본 길이 조건을 충족하지 못했습니다. 설명이나 코드 블록 없이 JSON 객체 하나만 다시 출력하세요.';
 

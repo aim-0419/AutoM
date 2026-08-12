@@ -1,3 +1,15 @@
+/**
+ * [발행 기록 화면의 기능 담당]
+ *
+ * 비개발자를 위한 설명:
+ * - 저장된 작업 기록(history.json)을 읽어 표로 보여줍니다.
+ * - 표에 나오는 정보: 날짜 / 키워드 / 제목 / 방식 / 상태 / 예약시각 / 결과 링크
+ * - 결과 링크를 누르면 프로그램 안이 아니라 기본 브라우저에서 열립니다.
+ *   또한 네이버·인스타그램의 정상 주소만 열리도록 백엔드에서 한 번 더 확인합니다.
+ * - 블로그·인스타그램·유튜브 기록이 한 파일에 함께 쌓이므로, 여기서 플랫폼별로 나눠 보여줍니다.
+ */
+
+// 내부 코드값을 사용자에게 보여줄 한국어 이름으로 바꾸는 표
 const MODE_LABELS = {
   'semi-auto': '반자동',
   review: '확인 후 발행',
@@ -59,6 +71,14 @@ function getEntryPlatform(entry) {
   return 'blog';
 }
 
+/**
+ * 기록 목록을 표의 줄로 그린다.
+ *
+ * 상태 표시 규칙:
+ *  · 실패             → '실패'
+ *  · 성공 + 예약시각이 아직 미래 → '예약' (아직 올라가지 않음)
+ *  · 그 외 성공       → '성공'
+ */
 function renderRows(rowsEl, entries) {
   rowsEl.innerHTML = '';
   entries.forEach((entry) => {
@@ -97,6 +117,14 @@ function renderRows(rowsEl, entries) {
   });
 }
 
+/**
+ * [화면 그리기] 발행 기록 화면을 만든다.
+ *
+ * platformTabs  : true면 블로그·인스타·유튜브 탭을 표시 (Creator 앱)
+ * renderEmptyShell: true면 기록이 없어도 표 틀을 그린다
+ *                   (꾸미기 담당 파일이 표를 찾아야 하기 때문)
+ * 탭은 방향키(←→)로도 이동할 수 있게 만들었습니다.
+ */
 export async function initHistoryView(
   container,
   { platformTabs = false, renderEmptyShell = false } = {}

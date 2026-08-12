@@ -1,9 +1,18 @@
 /**
- * 블로그의 공통 설정 화면을 데스크톱 앱 디자인에 맞게 정리한다.
- * AI 공급자, 계정, 출력 폴더를 구역별로 나누되 저장 동작은 기존 API를 그대로 사용한다.
+ * [설정 화면 '꾸미기' 담당 - 두 앱 공통]
+ *
+ * 비개발자를 위한 설명:
+ * - 설정 저장/불러오기 같은 실제 기능은 blog/views/settings.js가 담당합니다.
+ *   이 파일은 그 위에 설명 문구와 주의 안내를 덧붙여 이해하기 쉽게 만듭니다.
+ * - 특히 '연결 테스트' 버튼은 실제 AI 서비스에 요청을 보내 요금이 발생할 수 있으므로,
+ *   각 구역마다 그 점을 명확히 안내합니다.
+ * - includeInstagram 값에 따라 안내 문구가 달라집니다.
+ *     true (Creator)  : "블로그, 인스타그램, 유튜브의 문구와 대본 생성에 사용..."
+ *     false(블로그 앱): "네이버 블로그 제목과 본문 생성에 사용..."
  */
 import { initSettingsView as initBaseSettingsView } from '../../blog/views/settings.js';
 
+/** 앱 종류에 맞는 설명 문구를 돌려준다. (Creator는 3개 플랫폼, 블로그 앱은 블로그만 언급) */
 function getSettingsSectionCopy(includeInstagram) {
   return {
     text: {
@@ -53,6 +62,11 @@ function connectLabel(label, control, labelId) {
   }
 }
 
+/**
+ * AI 설정 구역(글쓰기 AI / 이미지 AI)을 꾸민다.
+ * 회사별 카드에 API 키 입력칸, 모델명, 연결 테스트 버튼이 들어 있고,
+ * 지금 선택된 회사의 카드에는 '현재 선택' 배지를 붙여 한눈에 알 수 있게 한다.
+ */
 function decorateProviderGroup(container, kind, sectionCopy) {
   const providerSection = container.querySelector(`#${kind}-provider-section`);
   const section = providerSection?.closest('.settings-section');
@@ -121,6 +135,7 @@ function decorateProviderGroup(container, kind, sectionCopy) {
       'aria-describedby',
       `${keyNote.id} creator-settings-${kind}-api-warning`
     );
+    // 키가 저장되어 있으면 초록색, 없으면 회색으로 표시되도록 상태 표시를 붙인다.
     const keyIsSaved = !keyNote.textContent.includes('없음');
     keyNote.classList.add('creator-settings-key-status');
     keyNote.classList.toggle('is-empty', !keyIsSaved);
@@ -143,6 +158,7 @@ function decorateProviderGroup(container, kind, sectionCopy) {
   syncActiveProvider();
 }
 
+/** 네이버 계정 구역을 꾸민다. (블로그 ID 입력, 로그인 상태 표시, 로그인/초기화 버튼) */
 function decorateNaverSection(container) {
   const input = container.querySelector('#input-naver-blog-id');
   const section = input?.closest('.settings-section');
@@ -193,6 +209,7 @@ function decorateNaverSection(container) {
   resetButton?.setAttribute('aria-describedby', resetNote.id);
 }
 
+/** 발행 기본값 구역을 꾸민다. (카테고리, 공개 범위, 자동 발행 간격, 이미지 장수) */
 function decoratePublishDefaults(container) {
   const categoryInput = container.querySelector('#input-category');
   const section = categoryInput?.closest('.settings-section');
@@ -230,6 +247,7 @@ function decoratePublishDefaults(container) {
   }
 }
 
+/** 출력 폴더 구역을 꾸민다. (결과물이 저장될 위치와 폴더 선택 버튼) */
 function decorateOutputSection(container) {
   const outputInput = container.querySelector('#input-output-folder');
   const section = outputInput?.closest('.settings-section');
@@ -261,6 +279,7 @@ function decorateOutputSection(container) {
   section.querySelector('#btn-choose-folder')?.setAttribute('aria-describedby', help.id);
 }
 
+/** 화면 아래 저장 영역을 꾸민다. (저장 버튼과 안내 문구) */
 function decorateSaveArea(container) {
   const saveBar = container.querySelector('.save-bar');
   const saveButton = saveBar?.querySelector('#btn-save-settings');
@@ -283,6 +302,11 @@ function decorateSaveArea(container) {
   saveButton.setAttribute('aria-describedby', copy.id);
 }
 
+/**
+ * 설정 항목이 많아 한 화면에 다 보이면 복잡하므로, 왼쪽에 작은 메뉴를 만들어 5개 그룹으로 나눈다.
+ *   텍스트 AI / 이미지 AI / 채널 계정 / 발행 기본값 / 출력 폴더
+ * 메뉴를 누르면 해당 그룹만 보이고 나머지는 숨겨진다.
+ */
 function buildSettingsWorkspace(container, { includeInstagram }) {
   if (container.querySelector('.creator-settings-workspace')) return;
 
@@ -387,6 +411,8 @@ function decorateSettingsView(container, { includeInstagram }) {
   decorateOutputSection(container);
   decorateSaveArea(container);
 
+  // 사용자가 AI 회사를 바꾸면 화면 내용이 다시 그려지는데, 그때 위에서 붙인 꾸밈이 사라진다.
+  // MutationObserver는 '화면이 바뀌는지 지켜보는 감시자'로, 변화가 생기면 꾸밈을 자동으로 다시 붙인다.
   for (const kind of ['text', 'image']) {
     const providerSection = container.querySelector(`#${kind}-provider-section`);
     if (!providerSection || providerSection.dataset.creatorSettingsObserved === 'true') continue;
@@ -401,9 +427,20 @@ function decorateSettingsView(container, { includeInstagram }) {
   }
 }
 
+/**
+ * 설정 화면을 그린다.
+ *
+ * 순서:
+ *   1) 공통 설정 화면을 만든다 (AI 키, 네이버 계정, 발행 기본값, 출력 폴더)
+ *   2) Creator라면 인스타그램 계정 구역을 추가로 만들어 넣는다
+ *   3) 설명 문구와 디자인을 덧붙인다
+ *   4) 항목을 5개 그룹으로 나눠 왼쪽 메뉴를 만든다
+ *   5) 인스타그램 로그인/초기화 버튼에 실제 동작을 연결한다
+ */
 export async function initStyledSettingsView(container, { includeInstagram = false } = {}) {
   await initBaseSettingsView(container);
 
+  // 인스타그램 계정 구역은 Creator에만 있으므로, 필요할 때만 만들어 붙인다.
   let instagramSection = null;
   if (includeInstagram) {
     instagramSection = document.createElement('div');
@@ -443,6 +480,7 @@ export async function initStyledSettingsView(container, { includeInstagram = fal
   const loginButton = instagramSection.querySelector('#creator-instagram-login');
   const resetButton = instagramSection.querySelector('#creator-instagram-reset');
 
+  // 현재 인스타그램 로그인 상태를 확인해 화면에 표시하는 함수
   const refreshStatus = async () => {
     const status = await window.api.instagramSessionStatus();
     statusEl.textContent = status.loggedIn

@@ -1,8 +1,16 @@
+/**
+ * [이미지 AI 목록 - 그림을 만들어 줄 AI를 고르는 곳]
+ *
+ * 비개발자를 위한 설명:
+ * - 이미지 생성은 OpenAI 또는 Google Gemini 중에서 고를 수 있습니다.
+ *   (글쓰기 AI와 따로 선택하므로, 글은 Claude로 쓰고 이미지는 OpenAI로 만들 수도 있습니다)
+ * - 어느 쪽을 고르든 프로그램 입장에서는 사용법이 같습니다.
+ *   · testConnection : API 키가 제대로 동작하는지 확인
+ *   · generateImage  : 설명글을 주면 PNG 파일을 만들어 저장
+ */
 const openai = require('./openai');
 const gemini = require('./gemini');
 
-// 선택 가능한 이미지 AI를 한곳에 모아 두는 목록이다.
-// 여기서 꺼낸 공급자는 모두 testConnection과 generateImage 기능을 제공한다.
 const providers = { openai, gemini };
 
 function list() {

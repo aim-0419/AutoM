@@ -1,5 +1,25 @@
+/**
+ * [대시보드 - Creator를 켜면 가장 먼저 보이는 요약 화면]
+ *
+ * 비개발자를 위한 설명:
+ * - 지금 프로그램이 어떤 상태인지 한눈에 보여주는 화면입니다.
+ *     · AI 설정 상태 (글쓰기/이미지 AI 키가 등록되어 있는지)
+ *     · 계정 연결 상태 (네이버, 인스타그램 로그인 여부)
+ *     · 최근 7일간 작업 건수와 추이
+ *     · 최근 작업 목록
+ *     · 지금 해결해야 할 알림 (예: "이미지 AI 키가 없습니다")
+ * - 알림을 누르면 해당 설정 화면으로 바로 이동합니다.
+ *
+ * - 시간은 모두 '서울 시간(Asia/Seoul)'으로 통일해 표시합니다.
+ *   해외에서 쓰거나 컴퓨터 시간대가 다르게 설정되어 있어도 헷갈리지 않게 하기 위해서입니다.
+ */
+
+// 화면을 그리는 도중 사용자가 다른 탭으로 옮기면, 뒤늦게 도착한 데이터가
+// 엉뚱한 화면을 덮어쓸 수 있다. 그래서 '몇 번째 그리기인지' 번호를 기억해 두고,
+// 최신 번호가 아니면 그 결과는 버린다.
 const dashboardRenderVersions = new WeakMap();
 
+// 플랫폼별로 화면에 표시할 이름
 const platformMeta = {
   blog: {
     label: '블로그',
@@ -68,6 +88,7 @@ function formatDashboardClock(value = new Date()) {
   };
 }
 
+/** 서울 시간 기준 날짜를 'YYYY-MM-DD' 문자열로 만든다. 날짜별 건수를 셀 때 기준으로 쓴다. */
 function getSeoulDateKey(value) {
   const timestamp = value instanceof Date ? value.getTime() : parseRecordedAt(value);
   if (!Number.isFinite(timestamp)) return null;
@@ -79,6 +100,7 @@ function getSeoulDateKey(value) {
   }).format(new Date(timestamp));
 }
 
+/** 최근 7일의 날짜 목록을 오래된 순으로 만든다. 막대 그래프의 가로축이 된다. */
 function getRecentDateKeys(days = 7) {
   const keys = [];
   const now = Date.now();
@@ -88,6 +110,10 @@ function getRecentDateKeys(days = 7) {
   return keys;
 }
 
+/**
+ * 기록 하나의 상태를 화면 표시용 라벨과 색상으로 바꾼다.
+ * 유튜브는 발행이 아니라 '생성'까지만 하므로 '생성 완료 / 생성 실패'로 다르게 표시한다.
+ */
 function getRecordStatus(entry) {
   const platform = getPlatform(entry);
   if (entry?.status === 'success') {
@@ -117,6 +143,14 @@ function getProviderLabel(state, kind, providerId) {
   return provider?.label || providerId || '설정 필요';
 }
 
+/**
+ * 대시보드가 필요로 하는 데이터 3가지(설정 / 기록 / 인스타 상태)를 가져올 함수를 준비한다.
+ *
+ * 왜 이렇게 복잡한가요?
+ * - 자동 테스트에서는 실제 프로그램 대신 가짜 데이터를 넣어 확인해야 합니다(overrides).
+ * - 해당 기능이 없는 환경에서는 null을 반환해, 그 부분만 '확인 불가'로 표시하고
+ *   나머지 화면은 정상적으로 보여줍니다. 즉, 하나가 없어도 화면 전체가 깨지지 않습니다.
+ */
 function getDashboardLoaders(overrides = {}) {
   return {
     settings:
@@ -288,6 +322,7 @@ function getSortedEntries(entries, platformId = null) {
     .sort((left, right) => right.timestamp - left.timestamp);
 }
 
+/** 최근 7일간의 작업 건수를 작은 막대 그래프로 그린다. */
 function renderRecordTrend(container, recordId, entries, platformId = null) {
   const trend = container.querySelector(
     `[data-dashboard-record="${recordId}"] [data-dashboard-trend]`
@@ -452,6 +487,11 @@ function addNotice(list, { title, description, target, tone = 'warning', action 
   list.appendChild(item);
 }
 
+/**
+ * '지금 확인이 필요한 항목' 알림 목록을 만든다.
+ * 예) API 키 없음, 블로그 ID 미입력, 네이버·인스타 로그인 필요
+ * 각 알림에는 해당 설정 화면으로 바로 이동하는 버튼이 함께 붙는다.
+ */
 function renderNotices(container, settingsResult, instagramResult, historyAvailable) {
   const list = container.querySelector('#creator-dashboard-notice-list');
   if (!list) return;
@@ -543,6 +583,11 @@ function wireDashboardNavigation(container, navigate) {
 
 const platformTargetValues = new Set(['blog', 'instagram', 'youtube', 'history', 'settings']);
 
+/**
+ * 대시보드의 빈 틀(레이아웃)을 먼저 그린다.
+ * 실제 값은 아직 '불러오는 중...'으로 두고, 데이터가 도착하면 그 자리만 채운다.
+ * 이렇게 하면 사용자가 빈 화면을 오래 보지 않아도 된다.
+ */
 function renderDashboardShell(container) {
   container.className = 'tab-panel active creator-dashboard-view';
   container.setAttribute('aria-busy', 'true');
@@ -753,6 +798,16 @@ function renderDashboardShell(container) {
   setText(container, '#creator-dashboard-current-time', clock.time);
 }
 
+/**
+ * [화면 그리기] 대시보드를 만든다.
+ *
+ * 순서:
+ *   1) 빈 틀을 먼저 그려 화면이 즉시 보이게 한다
+ *   2) 설정·기록·인스타 상태를 동시에(병렬로) 불러온다
+ *      → Promise.allSettled를 쓰기 때문에, 셋 중 하나가 실패해도 나머지는 정상 표시된다
+ *   3) 그 사이 사용자가 다른 화면으로 갔다면 결과를 버린다 (renderVersion 확인)
+ *   4) 각 영역에 값을 채우고 알림 목록을 만든다
+ */
 export async function initDashboardView(container, { navigate, loaders: loaderOverrides } = {}) {
   const renderVersion = (dashboardRenderVersions.get(container) || 0) + 1;
   dashboardRenderVersions.set(container, renderVersion);

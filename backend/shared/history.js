@@ -1,9 +1,17 @@
+/**
+ * [작업 기록 담당 - "무엇을 언제 만들고 올렸는가"]
+ *
+ * 비개발자를 위한 설명:
+ * - 글 생성/발행, 인스타 카드 발행, 유튜브 영상 제작 결과를 `history.json` 파일에 계속 쌓아둡니다.
+ * - 이 기록은 세 가지 용도로 쓰입니다.
+ *   1) 화면의 '기록' 탭에 목록으로 보여주기
+ *   2) 같은 키워드로 또 글을 쓰지 않도록 중복 방지
+ *   3) 새 글에서 내 기존 글로 연결하는 '내부 링크' 후보 찾기
+ */
 const fs = require('node:fs');
 const path = require('node:path');
 const { app } = require('electron');
 
-// 발행·저장 결과를 사용자별 history.json에 보관한다.
-// 이 기록은 화면의 발행 이력, 키워드 중복 방지, 내부링크 후보 선택에 함께 쓰인다.
 function getHistoryFilePath() {
   return path.join(app.getPath('userData'), 'history.json');
 }
@@ -51,7 +59,11 @@ function getUsedKeywords() {
   return Array.from(new Set(keywords));
 }
 
-/** 네이버에 실제 공개 발행된 성공 기록의 키워드만 반환한다. 비공개 검증 글은 추천에서 제외한다. */
+/**
+ * 네이버에 실제 '공개' 발행된 성공 기록의 키워드만 반환한다.
+ * - 실패한 글, 비공개(테스트용) 글, 주소가 네이버 블로그가 아닌 기록은 제외한다.
+ * - 새 글에서 내 기존 글로 링크를 걸 때 "실제로 존재하는 공개 글"만 후보가 되도록 하기 위함이다.
+ */
 function getPublishedKeywords() {
   const keywords = loadHistory()
     .filter(

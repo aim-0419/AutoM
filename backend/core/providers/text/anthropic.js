@@ -13,14 +13,29 @@ const keywordSchema = require('./keywordSchema');
 const instagramSchema = require('./instagramSchema');
 const youtubeSchema = require('./youtubeSchema');
 
-// Anthropic(Claude)용 연결 어댑터다. 다른 텍스트 AI와 결과 형식을 맞춰
-// 화면과 발행 과정이 공급자마다 달라지지 않도록 한다.
-const id = 'anthropic';
-const label = 'Claude (Anthropic)';
-const defaultModel = 'claude-sonnet-5';
+/**
+ * [Claude(Anthropic) 연결 어댑터]
+ *
+ * 비개발자를 위한 설명:
+ * - '어댑터'는 해외 전자제품에 쓰는 플러그 어댑터와 같은 뜻입니다.
+ *   Claude만의 사용법을 이 프로그램의 공통 규격에 맞춰 끼워주는 역할을 합니다.
+ * - openai.js, gemini.js도 같은 4가지 기능을 제공하므로, 프로그램의 나머지 부분은
+ *   지금 어떤 AI를 쓰는지 전혀 신경 쓰지 않아도 됩니다.
+ *     · testConnection            : API 키 확인
+ *     · generateArticle           : 블로그 글 쓰기
+ *     · generateKeywordSuggestions: 키워드 추천
+ *     · generateInstagramCarousel : 인스타 카드 문구 쓰기
+ *     · generateYoutubeProject    : 유튜브 대본 쓰기
+ * - 실제 글의 규칙(형식·길이·안전 기준)은 이 파일이 아니라 articleSchema.js 등이 정합니다.
+ *   이 파일은 "그 주문서를 Claude에게 전달하고 답변을 받아오는" 일만 합니다.
+ */
+const id = 'anthropic'; // 프로그램 내부에서 쓰는 식별 이름
+const label = 'Claude (Anthropic)'; // 설정 화면에 표시되는 이름
+const defaultModel = 'claude-sonnet-5'; // 사용자가 모델을 지정하지 않았을 때 쓰는 기본 모델
 
 async function testConnection({ apiKey, model }) {
-  // 저장 전에도 모델 조회를 해 API 키와 모델 이름의 조합을 확인할 수 있게 한다.
+  // 설정 화면의 '연결 테스트' 버튼이 부르는 기능이다.
+  // 실제 글을 만들지 않고 모델 정보만 조회해, 키와 모델 이름이 맞는지 저렴하게 확인한다.
   if (!apiKey) {
     return { success: false, message: 'API 키를 입력해주세요.' };
   }
@@ -106,6 +121,7 @@ async function generateKeywordSuggestions({ count = 5, excludeKeywords = [], mod
   }
 }
 
+/** 인스타그램 카드뉴스의 문구(카드별 제목·본문·해시태그)를 만든다. */
 async function generateInstagramCarousel({ keyword, cardCount, model, apiKey }) {
   if (!apiKey) {
     throw new Error('API 키가 설정되지 않았습니다. 설정 화면에서 입력해 주세요.');
@@ -139,6 +155,11 @@ async function generateInstagramCarousel({ keyword, cardCount, model, apiKey }) 
   }
 }
 
+/**
+ * 유튜브 영상 기획안을 만든다.
+ * 제목·대본·장면별 화면 설명·자막·해시태그를 한 번에 받아온다.
+ * 채널 정보(주제/시청자/관점)와 최근 만든 영상 목록을 함께 보내 중복을 피한다.
+ */
 async function generateYoutubeProject({
   keyword,
   format,

@@ -14,19 +14,33 @@ const {
 const { detectSensitiveDomains, splitGeneratedDisclaimerBlock } = require('./contentSafety');
 
 /**
- * AI가 만든 글을 발행하기 전에 확인하는 "최종 품질 관문"이다.
+ * [품질 검사소 - 글을 발행해도 되는지 마지막으로 확인하는 관문]
  *
- * errors는 그대로 발행하면 안 되는 문제라 발행을 막고, warnings는 글을 더 자연스럽게
- * 다듬을 수 있다는 안내만 남긴다. 이미 공개 발행한 글의 기록도 함께 비교해 중복·유사
- * 콘텐츠가 반복되는 일을 줄인다.
+ * 비개발자를 위한 설명:
+ * - AI가 쓴 글을 그대로 올리면 아래 같은 문제가 생길 수 있습니다.
+ *     · 너무 짧거나 너무 긴 글, 소제목·이미지·태그 개수가 안 맞는 글
+ *     · "100% 효과", "무조건 완치" 같은 과장·단정 표현
+ *     · 예전에 올린 글과 거의 똑같은 글 (검색에서 불이익을 받습니다)
+ * - 그래서 발행 직전에 이 파일이 자동으로 검사합니다.
+ *
+ * 검사 결과는 두 종류입니다.
+ *   · errors(오류)   : 그대로 올리면 안 되는 문제 → 발행을 '중단'합니다.
+ *   · warnings(경고) : 고치면 더 좋은 부분 → 발행은 되지만 화면에 안내가 뜹니다.
+ *
+ * '중복 검사'는 어떻게 하나요?
+ *   1) 지문(fingerprint): 글 전체를 짧은 암호값 하나로 바꿔 둡니다.
+ *      값이 같으면 글자 하나 안 틀리고 똑같은 글이라는 뜻입니다.
+ *   2) 서명(signature)  : 단어 3개씩 묶은 조각들을 모아둡니다.
+ *      조각이 많이 겹치면 "표현만 조금 바꾼 비슷한 글"임을 알 수 있습니다.
  */
 const INTERNAL_LINK_HEADING = '함께 읽으면 좋은 글';
 // AI가 글자 수를 아주 조금 넘길 수 있어, 요청 상한의 15%까지는 허용한다.
 const MAX_BODY_CHARS = Math.ceil(DEFAULT_MAX_CHARS * 1.15);
-const MAX_INTERNAL_LINKS = 3;
+const MAX_INTERNAL_LINKS = 3; // 본문 끝 관련 글 링크 최대 개수
 // 두 글의 핵심 문장 조각이 68% 이상 같으면 사실상 같은 글로 보고 발행을 막는다.
 const DUPLICATE_SIMILARITY_LIMIT = 0.68;
 
+// 중복 비교에서 무시할 흔한 단어들. 어느 글에나 나오는 말이라 '비슷함'의 근거가 되지 못한다.
 const SIGNATURE_STOPWORDS = new Set([
   '관련',
   '경우',
@@ -171,6 +185,11 @@ function countExactPhrase(text, phrase) {
   return count;
 }
 
+/**
+ * 본문의 '진짜 첫 문단'을 찾는다.
+ * 소제목(## ), 이미지 표시([IMAGE_1]), 구분선(---)은 건너뛰고 실제 설명 문단을 고른다.
+ * 검색 결과에 요약처럼 노출되는 부분이라 길이를 따로 점검하기 위해 필요하다.
+ */
 function getFirstParagraph(body) {
   return stripGeneratedAppendices(body)
     .split(/\n\s*\n/u)
@@ -184,6 +203,10 @@ function getFirstParagraph(body) {
     );
 }
 
+/**
+ * 같은 긴 문단(80자 이상)이 한 글 안에서 두 번 이상 반복되는지 확인한다.
+ * 이런 글은 AI가 내용을 채우려고 복사한 경우가 많아 품질이 낮게 평가된다.
+ */
 function findRepeatedLongParagraph(body) {
   const seen = new Set();
   const paragraphs = stripGeneratedAppendices(body)
@@ -214,10 +237,16 @@ function collectInternalLinkUrls(body) {
 }
 
 /**
- * 글 하나를 구조·표현·중복 관점에서 검사한다.
+ * [메인 검사 함수] 글 하나를 세 단계로 나누어 검사한다.
+ *
+ *   1단계 - 형식 검사 : 제목/본문 길이, 소제목 수, 이미지 수와 순서, 태그 수, 내부링크
+ *   2단계 - 표현 검사 : 과장·단정 표현, 구매 유도 문구, 키워드 과다 반복
+ *   3단계 - 중복 검사 : 예전에 공개 발행한 글과 얼마나 겹치는지
  *
  * strictTopicDuplicates가 true인 완전자동 모드에서는 같은 키워드도 차단한다.
  * 사용자가 직접 검토하는 모드에서는 같은 키워드를 경고로만 보여 주어 수정 기회를 남긴다.
+ *
+ * 반환값: { passed(통과 여부), errors, warnings, metrics(측정 수치), fingerprint, signature }
  */
 function auditContent(content, { historyEntries = [], strictTopicDuplicates = false } = {}) {
   const errors = [];
@@ -295,12 +324,15 @@ function auditContent(content, { historyEntries = [], strictTopicDuplicates = fa
     title,
     body: coreBody,
   });
+  // 아래 목록들은 '금지 표현 사전'이다. 정규식(/.../)은 문장에서 특정 패턴을 찾는 검색 규칙이다.
+  // 건강 분야: "100% 효과", "완치됩니다", "부작용 전혀 없습니다" 등 의학적으로 단정하는 표현
   const medicalOverclaimPatterns = [
     /(?:100\s*%|무조건|반드시).{0,12}(?:효과|개선|치료|완치)/i,
     /(?:완치|치료)\s*(?:됩니다|된다|할\s*수\s*있습니다)/i,
     /부작용(?:이|은)?\s*(?:전혀\s*)?없(?:습니다|다)/i,
     /특효약|만병통치/i,
   ];
+  // 모든 분야 공통: "무조건 성공", "성과를 보장" 같은 결과 보장 표현
   const generalGuaranteePatterns = [
     /(?:100\s*%|무조건|반드시).{0,12}(?:성공|합격|매출|판매|절약|개선|효과)/i,
     /(?:결과|성과|효과)(?:를|가|은|는)?\s*(?:보장|확정)/i,
@@ -311,6 +343,7 @@ function auditContent(content, { historyEntries = [], strictTopicDuplicates = fa
     addError('guaranteed-outcome', '효과나 결과를 보장하는 과장 표현이 감지되었습니다.');
   }
 
+  // 금융 분야: "원금 보장", "수익 확정", "무조건 오릅니다" 등 (금융 광고 규제 대상 표현)
   const financialOverclaimPatterns = [
     /원금(?:이|은|을)?\s*(?:보장|손실\s*없)/i,
     /(?:수익|수익률|대출\s*승인)(?:이|을|은|는)?\s*(?:보장|확정)/i,
@@ -320,6 +353,7 @@ function auditContent(content, { historyEntries = [], strictTopicDuplicates = fa
     addError('financial-overclaim', '원금·수익·대출 결과를 보장하는 금융 표현이 감지되었습니다.');
   }
 
+  // 법률 분야: "무조건 승소", "합법 보장" 등 법적 결과를 단정하는 표현
   const legalOverclaimPatterns = [
     /(?:무조건|반드시).{0,12}(?:승소|무죄|처벌\s*없|합법)/i,
     /(?:승소|무죄|합법)(?:가|이|을|은|는)?\s*(?:보장|확정)/i,
@@ -387,21 +421,22 @@ function auditContent(content, { historyEntries = [], strictTopicDuplicates = fa
   }
 
   return {
-    passed: errors.length === 0,
+    passed: errors.length === 0, // 오류가 하나도 없어야 통과
     errors,
     warnings,
+    // metrics는 화면의 '품질 리포트'에 숫자로 표시되는 측정값이다.
     metrics: {
-      titleChars,
-      bodyChars,
-      headings: headingCount,
-      images: markerNumbers.length - missingImageNumbers.length,
-      tags: tags.length,
-      internalLinks: internalLinkUrls.length,
-      keywordMentions,
-      maxHistorySimilarity: Math.round(maxHistorySimilarity * 100),
+      titleChars, // 제목 글자 수
+      bodyChars, // 본문 글자 수
+      headings: headingCount, // 소제목 개수
+      images: markerNumbers.length - missingImageNumbers.length, // 실제로 만들어진 이미지 수
+      tags: tags.length, // 태그 개수
+      internalLinks: internalLinkUrls.length, // 관련 글 링크 수
+      keywordMentions, // 핵심 키워드가 본문에 등장한 횟수
+      maxHistorySimilarity: Math.round(maxHistorySimilarity * 100), // 과거 글과의 최대 유사도(%)
     },
-    fingerprint,
-    signature,
+    fingerprint, // 중복 비교용 지문 (기록에만 저장)
+    signature, // 유사도 비교용 서명 (기록에만 저장)
   };
 }
 

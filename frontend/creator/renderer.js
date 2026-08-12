@@ -1,6 +1,12 @@
 /**
- * Creator의 왼쪽 메뉴와 각 화면을 연결하는 프론트엔드 진입점이다.
- * 사용자가 탭을 바꾸면 해당 화면 모듈을 불러오고 현재 상태를 갱신한다.
+ * [Creator 앱 화면 전환 담당]
+ *
+ * 비개발자를 위한 설명:
+ * - 왼쪽 메뉴 6개(대시보드 / 블로그 / 인스타그램 / 유튜브 / 기록 / 설정)와
+ *   각 화면을 연결합니다. 메뉴를 누르면 창 안의 내용만 바뀝니다.
+ * - 블로그 화면은 블로그 전용 앱(AutoM)과 완전히 같은 코드를 공유합니다.
+ *   두 앱에서 동작이 달라지는 일이 없도록 한 곳(shared/views/blog.js)에서 관리합니다.
+ * - 대시보드와 기록 화면은 열 때마다 최신 정보로 다시 그립니다(reloadOnActivate).
  */
 import { initDashboardView } from './views/dashboard.js';
 import { initCreatorHistoryView } from './views/history.js';
@@ -9,6 +15,7 @@ import { initYoutubeView } from './views/youtube.js';
 import { initCreatorSettingsView } from './views/settings.js';
 import { initStyledBlogView } from '../shared/views/blog.js';
 
+// 화면마다 위쪽에 표시할 분류·제목·설명 문구
 const pageMeta = {
   dashboard: {
     context: '작업 개요',
@@ -42,9 +49,15 @@ const pageMeta = {
   },
 };
 
+/**
+ * 메뉴 6개와 각각의 화면을 연결한 표다.
+ *   panel : 내용이 들어갈 자리, init : 화면을 그리는 함수,
+ *   loaded: 이미 그렸는지, reloadOnActivate: 열 때마다 새로 그릴지
+ */
 const tabs = {
   dashboard: {
     panel: document.getElementById('tab-dashboard'),
+    // 대시보드의 바로가기 버튼이 다른 화면으로 이동할 수 있도록 이동 함수를 함께 넘긴다.
     init: (panel) => initDashboardView(panel, { navigate: activateTab }),
     loaded: false,
     reloadOnActivate: true,
@@ -56,10 +69,16 @@ const tabs = {
   settings: { panel: document.getElementById('tab-settings'), init: initCreatorSettingsView, loaded: false },
 };
 
+/**
+ * 메뉴를 눌렀을 때 실행되는 화면 전환 함수.
+ * 순서: 선택 표시 갱신 → 화면 위쪽 제목·설명 교체 → 화면 그리기 → 스크롤 맨 위로
+ * 화면을 그리다 오류가 나도 앱이 멈추지 않도록, 그 자리에 오류 메시지만 표시한다.
+ */
 async function activateTab(tabId) {
   const selected = tabs[tabId];
   if (!selected) return;
 
+  // 대시보드만 배경 디자인이 달라서 body에 표시를 남겨 CSS가 구분할 수 있게 한다.
   document.body.classList.toggle('creator-dashboard-active', tabId === 'dashboard');
   document.body.dataset.activeTab = tabId;
 
@@ -106,12 +125,15 @@ async function activateTab(tabId) {
   }
 }
 
+// 왼쪽 메뉴 버튼들에 클릭 동작을 연결한다.
 document.querySelectorAll('[data-tab]').forEach((button) => {
   button.addEventListener('click', () => activateTab(button.dataset.tab));
 });
 
+// 화면 안에서 다른 화면으로 이동시키는 버튼들(대시보드의 바로가기 등)도 연결한다.
 document.querySelectorAll('[data-target-tab]').forEach((button) => {
   button.addEventListener('click', () => activateTab(button.dataset.targetTab));
 });
 
+// 앱을 켰을 때 가장 먼저 보여줄 화면
 activateTab('dashboard');

@@ -1,6 +1,21 @@
 /**
- * 두 앱이 공통으로 쓰는 화면 요청(IPC)을 등록하는 중앙 연결부다.
- * 설정, AI 생성, 블로그 발행, 기록 조회를 해당 전용 모듈에 전달한다.
+ * [공통 명령 처리실 - 설정 / 블로그 글 생성 / 발행 / 기록]
+ *
+ * 비개발자를 위한 설명:
+ * - AutoM(블로그 전용)과 AutoM Creator 두 앱이 '똑같이' 쓰는 기능들을 모아둔 곳입니다.
+ * - 화면에서 버튼을 누르면 → preload(창구) → 이 파일(처리실) → 실제 기능 모듈 순으로 일이 넘어갑니다.
+ * - 이 파일에서 중요한 것은 '실행 전 안전 검사'입니다. AI 호출은 돈이 들고 발행은 되돌리기 어렵기
+ *   때문에, 시작하기 전에 아래 항목들을 먼저 확인합니다.
+ *     · 키워드 개수와 형식이 올바른가
+ *     · 이미 발행한 키워드를 또 쓰려는 건 아닌가
+ *     · AI API 키가 등록되어 있는가
+ *     · 업로드하려는 이미지가 정말 우리 프로그램이 만든 파일인가
+ *
+ * 4가지 발행 모드 (화면에서 사용자가 선택):
+ *   · semi-auto (반자동)    : 글·이미지를 만들어 내 컴퓨터 폴더에만 저장. 발행은 사람이 직접.
+ *   · review   (확인 후 발행): 만든 결과를 미리보기로 확인하고, 사용자가 발행 버튼을 눌러야 올라감.
+ *   · full-auto(완전자동)   : 만들자마자 바로 발행. 여러 개면 정해진 간격을 두고 순서대로 발행.
+ *   · scheduled(예약발행)   : 네이버에 미래 시각으로 예약 등록.
  */
 const { ipcMain, dialog, app, shell } = require('electron');
 const fs = require('node:fs');
@@ -20,22 +35,32 @@ const { isValidNaverBlogId } = require('../core/settingsValidation');
 const naverSession = require('../features/blog/session');
 const naverPublisher = require('../features/blog/publisher');
 
-/**
- * 화면에서 누른 버튼과 실제 프로그램 기능을 연결하는 접수 창구다.
- * 화면은 직접 파일을 저장하거나 네이버를 조작하지 않고, 이 파일을 거쳐 검사된 요청만 실행한다.
- */
 // 완전자동은 계정 보호와 중복 발행 위험을 줄이기 위해 한 번에 3개까지만 허용한다.
+// (짧은 시간에 여러 글이 올라가면 네이버가 스팸으로 볼 수 있기 때문)
 const MAX_FULL_AUTO_BATCH = 3;
-// 발행하지 않는 생성 모드도 실수로 과도한 작업을 시작하지 않도록 상한을 둔다.
+// 발행하지 않는 생성 모드도 실수로 과도한 작업(=과도한 API 비용)을 시작하지 않도록 상한을 둔다.
 const MAX_GENERAL_BATCH = 20;
 // 동시에 두 작업이 시작되는 것을 막기 위해, 현재 실행 중인 묶음 하나만 기억한다.
+// (값이 들어 있으면 "지금 작업 중"이라는 뜻)
 let activeBatch = null;
 
 function normalizeKeyword(value) {
   // 띄어쓰기·대소문자·전각 문자만 다른 같은 키워드를 중복으로 잡기 위한 비교용 형태다.
+  // 예) "부동산 세금", "부동산  세금", "부동산세금" → 사람이 보기엔 같은 주제이므로 통일해서 비교한다.
   return String(value || '').normalize('NFKC').toLocaleLowerCase('ko-KR').replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * 생성을 시작하기 전에 요청이 올바른지 검사한다. 하나라도 어긋나면 시작하지 않고 오류를 낸다.
+ *
+ * 검사 순서:
+ *  1) 발행 모드가 정해진 4가지 중 하나인가
+ *  2) 키워드가 1개 이상인가 / 20개를 넘지 않는가
+ *  3) 자동·예약 발행이면 3개를 넘지 않는가
+ *  4) 각 키워드가 1~100자인가
+ *  5) 입력 목록 안에 같은 키워드가 두 번 들어있지 않은가
+ *  6) 자동·예약 발행이면, 예전에 이미 공개 발행한 키워드를 다시 쓰는 건 아닌가
+ */
 function validateBatchRequest(keywords, mode, historyEntries) {
   // API 비용이나 실제 발행이 시작되기 전에 모드·개수·중복 키워드를 먼저 확인한다.
   if (!['semi-auto', 'review', 'full-auto', 'scheduled'].includes(mode)) {
@@ -103,6 +128,12 @@ function validateGeneratedImagePaths(images, settings) {
   }
 }
 
+/**
+ * 완성된 글이 발행해도 되는 수준인지 '품질 검사'를 돌린다.
+ * - 글자 수, 문단 구성, 금지 표현, 과거 글과의 내용 중복 등을 확인한다.
+ * - 검사에 쓰는 내부 데이터(비교용 지문)는 화면으로 보내지 않고 기록에만 저장한다.
+ *   화면에는 사람이 이해할 수 있는 요약 결과만 전달한다.
+ */
 function auditGeneratedContent(content, historyEntries, strictTopicDuplicates = false) {
   // 내부 검사 결과와 화면에 보여 줄 결과를 함께 만든다.
   // 비교용 지문은 화면에 보내지 않고, 발행 기록에만 따로 저장한다.
@@ -374,6 +405,17 @@ function registerIpcHandlers(getMainWindow) {
     return { success: true, message: '현재 단계가 끝나는 대로 작업을 중단합니다.' };
   });
 
+  /**
+   * [핵심] 메인 화면의 '생성 시작' 버튼이 실행하는 기능이다.
+   *
+   * 전체 흐름 (키워드 하나당 반복):
+   *   1) 요청 검사 → 2) AI로 글 작성 → 3) 글에 맞는 이미지 생성 →
+   *   4) 내 예전 글로 가는 내부 링크 붙이기 → 5) 품질 검사 →
+   *   6) 모드에 따라 발행 / 예약 / 미리보기 대기 → 7) 기록 남기기
+   *
+   * 완전자동에서 여러 개를 처리할 때는 글과 글 사이에 설정된 시간만큼 기다린다.
+   * 중간에 발행이 실패하면 남은 작업은 자동으로 중단해, 문제가 반복되는 것을 막는다.
+   */
   ipcMain.handle('pipeline:generate-batch', async (_event, { keywords, mode, scheduleAt }) => {
     // 메인 화면의 [생성 시작] 버튼이 누르면 여기로 들어온다.
     // keywords는 사용자 키워드 목록이고, mode는 반자동/확인 후 발행/완전자동/예약발행 중 하나다.
@@ -395,6 +437,8 @@ function registerIpcHandlers(getMainWindow) {
       };
 
       const results = [];
+      // 중단·실패가 생겼을 때 아직 처리하지 않은 키워드들을 한꺼번에 '취소' 상태로 정리한다.
+      // (화면의 진행 목록에 빈칸이 남지 않도록 각 항목에 사유를 채워준다)
       const stopRemaining = (startIndex, stage, message) => {
         for (let index = startIndex; index < keywords.length; index += 1) {
           sendProgress({ index, total: keywords.length, keyword: keywords[index], stage });
@@ -527,6 +571,8 @@ function registerIpcHandlers(getMainWindow) {
 
       return { results, cancelled: batchState.cancelled };
     } finally {
+      // 성공했든 오류가 났든 '작업 중' 표시를 반드시 해제한다.
+      // 그래야 다음 번에 생성 시작 버튼을 다시 누를 수 있다.
       if (activeBatch === batchState) {
         activeBatch = null;
       }

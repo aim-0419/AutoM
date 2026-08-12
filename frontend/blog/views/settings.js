@@ -1,6 +1,21 @@
-// 패키징된(서명되지 않은) Electron 앱에서 네이티브 <select> 팝업이 실제 마우스 클릭을
-// 받지 못하는 환경이 있어(설치 후 실사용 중 확인됨), 네이티브 select 대신 순수 DOM으로
-// 직접 만든 드롭다운을 사용한다.
+/**
+ * [설정 화면의 기능 담당]
+ *
+ * 비개발자를 위한 설명:
+ * - 설정 화면의 실제 내용(입력칸, 저장 버튼, 연결 테스트)을 만드는 파일입니다.
+ *   보기 좋게 꾸미는 일은 shared/views/settings.js가 따로 담당합니다.
+ *
+ * - 여기서 관리하는 설정:
+ *     · 글쓰기 AI / 이미지 AI 선택과 API 키, 모델명
+ *     · 네이버 블로그 ID와 로그인
+ *     · 발행 기본값 (카테고리, 공개 범위, 자동 발행 간격, 이미지 장수)
+ *     · 결과물 저장 폴더
+ *
+ * ⚠ 왜 선택 상자를 직접 만들었나요?
+ * 설치한 Electron 앱(서명되지 않은 상태)에서는 브라우저 기본 드롭다운(<select>)이
+ * 마우스 클릭을 받지 못하는 문제가 실제로 확인되었습니다. 그래서 겉모습만 드롭다운처럼
+ * 보이는 요소를 직접 만들어 씁니다. 마우스뿐 아니라 방향키·엔터·ESC로도 조작됩니다.
+ */
 function escapeHtml(value) {
   // 설정값을 화면 HTML 안에 넣을 때 태그처럼 실행되지 않도록 문자로 바꾼다.
   return String(value)
@@ -195,6 +210,13 @@ function toBoundedNumber(value, minimum, maximum, fallback) {
   return Math.min(maximum, Math.max(minimum, Number.isFinite(parsed) ? parsed : fallback));
 }
 
+/**
+ * '연결 테스트' 버튼에 동작을 연결한다.
+ *
+ * 편의 기능: 테스트에 성공하면 저장 버튼을 따로 누르지 않아도 그 키·모델을 바로 저장하고,
+ * 사용할 AI 회사도 그 회사로 자동 변경합니다.
+ * (테스트가 성공했다는 것은 그 설정을 쓰겠다는 뜻이므로, 저장을 잊는 실수를 막아줍니다)
+ */
 function attachTestListeners(container) {
   // 각 공급자의 "연결 테스트" 버튼은 화면에 입력한 값 또는 저장된 값을 실제 API로 확인한다.
   container.querySelectorAll('.btn-test').forEach((btn) => {
@@ -258,6 +280,13 @@ function attachApiKeyPageListeners(container) {
   });
 }
 
+/**
+ * [화면 그리기] 설정 화면 전체를 만든다.
+ *
+ * 순서: 저장된 설정 불러오기 → 화면 구성 → 버튼에 동작 연결
+ * API 키는 실제 값이 화면으로 오지 않고 "저장됨 / 마스킹된 일부"만 전달됩니다.
+ * 입력칸을 비워둔 채 저장하면 기존 키가 그대로 유지됩니다.
+ */
 export async function initSettingsView(container) {
   // 설정 탭을 처음 열 때 저장된 설정과 선택 가능한 AI 목록을 함께 불러온다.
   container.innerHTML = `<p class="placeholder">설정을 불러오는 중...</p>`;

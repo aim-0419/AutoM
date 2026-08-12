@@ -1,3 +1,15 @@
+/**
+ * [Creator 기능 자동 검사 - 인스타그램 / 유튜브]
+ *
+ * 비개발자를 위한 설명:
+ * - 코드를 고친 뒤 기존 기능이 망가지지 않았는지 자동으로 확인하는 검사 목록입니다.
+ * - 인터넷 연결이나 AI 요금 없이 실행됩니다. 실제 AI 대신 '가짜 응답'을 넣어
+ *   프로그램이 그 응답을 올바르게 처리하는지만 봅니다.
+ * - 확인하는 것들: 카드/장면 개수 규칙, 글자 수 제한, 잘못된 응답의 거부,
+ *   발행 전 파일 검사, 영상 시간 계산, 자막 형식, 중복 방지 등
+ *
+ * 실행: npm run test:creator
+ */
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const fs = require('node:fs');

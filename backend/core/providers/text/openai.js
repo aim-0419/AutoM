@@ -13,11 +13,18 @@ const keywordSchema = require('./keywordSchema');
 const instagramSchema = require('./instagramSchema');
 const youtubeSchema = require('./youtubeSchema');
 
-// OpenAI용 연결 어댑터다. 화면과 생성 파이프라인은 공급자별 API 차이를 몰라도
-// testConnection / generateArticle / generateKeywordSuggestions라는 같은 기능만 호출한다.
-const id = 'openai';
-const label = 'OpenAI (GPT)';
-const defaultModel = 'gpt-5.5';
+/**
+ * [OpenAI(ChatGPT) 연결 어댑터]
+ *
+ * 비개발자를 위한 설명:
+ * - anthropic.js(Claude), gemini.js(Google)와 하는 일이 완전히 같습니다.
+ *   다른 점은 오직 'OpenAI 서비스를 부르는 방법'뿐입니다.
+ * - 글의 규칙과 검수 기준은 articleSchema.js 등 공통 파일이 정하므로,
+ *   어떤 AI를 골라도 결과물의 형식과 품질 기준은 동일합니다.
+ */
+const id = 'openai'; // 프로그램 내부 식별 이름
+const label = 'OpenAI (GPT)'; // 설정 화면 표시 이름
+const defaultModel = 'gpt-5.5'; // 기본 모델
 
 async function testConnection({ apiKey, model }) {
   // 실제 모델 목록에 한 번 조회해, 키와 선택한 모델이 사용 가능한지 빠르게 확인한다.

@@ -1,6 +1,14 @@
 /**
- * 블로그, 인스타그램, YouTube가 같은 콘텐츠 안전 기준을 사용하도록 모아 둔 파일이다.
- * 콘텐츠 분야 자체는 제한하지 않지만, 판단에 주의가 필요한 주제에는 추가 안내를 적용한다.
+ * [콘텐츠 안전 기준 - 블로그·인스타그램·유튜브 공통]
+ *
+ * 비개발자를 위한 설명:
+ * - 이 프로그램은 어떤 주제든 만들 수 있게 열어두되, 잘못된 정보가 퍼지면 실제로
+ *   사람에게 피해가 갈 수 있는 세 분야(건강 / 금융 / 법률)는 특별히 관리합니다.
+ * - 관리 방법은 두 가지입니다.
+ *     1) AI에게 글을 부탁할 때 아래 '공통 안전 기준'을 항상 함께 보냅니다.
+ *        → 애초에 위험한 표현을 쓰지 않도록 지시하는 사전 예방입니다.
+ *     2) 완성된 글의 주제를 자동으로 판별해, 해당 분야면 글 끝에 안내 문구(고지문)를 붙입니다.
+ *        → 예: "본 글은 일반적인 건강 정보이며 의학적 진단을 대체하지 않습니다."
  */
 const GENERAL_CONTENT_SAFETY_RULES = `공통 안전 기준:
 - 사용자가 입력한 주제를 다른 분야로 바꾸거나 특정 분야로 제한하지 마세요.
@@ -12,6 +20,11 @@ const GENERAL_CONTENT_SAFETY_RULES = `공통 안전 기준:
 - 위험한 작업이나 활동을 다룰 때는 보호 장비, 공식 지침, 전문가 확인 등 필요한 주의사항을 생략하지 마세요.
 - 불법 행위, 사기, 개인정보 침해, 혐오·차별, 성적 착취를 조장하는 내용을 작성하지 마세요.`;
 
+/**
+ * 주의가 필요한 3개 분야와, 각 분야를 알아채는 단어 목록, 그리고 붙일 안내 문구다.
+ * patterns 안의 단어가 키워드·제목·본문 어딘가에 나오면 그 분야로 판단한다.
+ * Object.freeze는 "이 목록은 프로그램 실행 중에 바뀌면 안 된다"고 잠가두는 장치다.
+ */
 const SENSITIVE_TOPIC_RULES = Object.freeze([
   Object.freeze({
     id: 'health',
@@ -54,6 +67,7 @@ function collectContentText(content) {
     .join(' ');
 }
 
+/** 이 콘텐츠가 어떤 주의 분야에 해당하는지 찾는다. 결과 예: ['health'], ['finance','legal'], [] */
 function detectSensitiveDomains(content) {
   const text = collectContentText(content);
   if (!text) return [];
@@ -67,11 +81,23 @@ function getSensitiveDisclaimers(content) {
   return SENSITIVE_TOPIC_RULES.filter((rule) => domains.has(rule.id)).map((rule) => rule.disclaimer);
 }
 
+/**
+ * 안내 문구를 본문 아래에 붙일 형태로 만든다. (구분선 --- 아래에 한 줄씩)
+ * 프로그램이 정해 둔 문구만 허용해, 엉뚱한 문장이 고지문인 척 끼어드는 것을 막는다.
+ */
 function renderDisclaimerBlock(disclaimers) {
   const unique = [...new Set((Array.isArray(disclaimers) ? disclaimers : []).filter((item) => KNOWN_DISCLAIMERS.has(item)))];
   return unique.length > 0 ? `\n\n---\n${unique.join('\n')}` : '';
 }
 
+/**
+ * 본문을 '진짜 내용'과 '프로그램이 붙인 안내 문구'로 나눈다.
+ *
+ * 왜 필요한가요?
+ * - 나중에 관련 글 링크를 본문 끝에 추가할 때, 안내 문구보다 '위'에 넣어야 자연스럽습니다.
+ * - 중복 검사를 할 때도 매 글마다 똑같이 붙는 안내 문구를 빼고 비교해야 정확합니다.
+ * 사용자가 직접 쓴 구분선(---)과 문장은 건드리지 않고 그대로 둔다.
+ */
 function splitGeneratedDisclaimerBlock(body) {
   // 프로그램이 붙인 고지문만 분리한다. 사용자가 직접 작성한 구분선과 문장은 그대로 보존한다.
   const source = String(body || '');
@@ -95,6 +121,10 @@ function splitGeneratedDisclaimerBlock(body) {
   };
 }
 
+/**
+ * 본문 끝에 해당 분야의 안내 문구를 붙인다.
+ * 이미 붙어 있는 문구는 중복해서 넣지 않는다.
+ */
 function appendSensitiveDisclaimers(body, content) {
   const existing = splitGeneratedDisclaimerBlock(body);
   const disclaimers = [...new Set([...existing.disclaimers, ...getSensitiveDisclaimers(content)])];

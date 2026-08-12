@@ -1,5 +1,21 @@
+/**
+ * [블로그 화면 '꾸미기' 담당 - 두 앱 공통]
+ *
+ * 비개발자를 위한 설명:
+ * - 블로그 화면의 실제 기능(키워드 입력, 생성, 발행)은 blog/views/main.js가 만듭니다.
+ *   이 파일은 그 위에 '보기 좋게 하는 요소'만 덧붙입니다.
+ *     · 상단의 1→2→3→4 제작 단계 안내
+ *     · 입력칸 아래 도움말 문구
+ *     · 완전자동·예약발행 선택지에 붙는 빨간 '주의' 표시
+ *     · 생성 버튼 옆의 "현재 선택: 반자동" 표시
+ *     · 발행 전 확인 안내 상자
+ * - 기능과 디자인을 이렇게 나눈 이유: AutoM과 Creator 두 앱이 같은 블로그 기능을 쓰되,
+ *   화면 꾸밈은 한 곳에서 관리해 두 앱이 항상 똑같이 보이도록 하기 위해서입니다.
+ * - aria-label, aria-live 같은 속성은 시각장애인용 화면 읽기 프로그램을 위한 표시입니다.
+ */
 import { initMainView } from '../../blog/views/main.js';
 
+// 내부 코드값을 사용자에게 보여줄 한국어 이름으로 바꾸는 표
 const MODE_NAMES = {
   'semi-auto': '반자동',
   review: '확인 후 발행',
@@ -7,6 +23,7 @@ const MODE_NAMES = {
   scheduled: '예약 발행',
 };
 
+/** 화면 맨 위에 표시할 '제작 4단계' 안내를 만든다. (키워드 → 생성 → 검토 → 저장/발행) */
 function createBlogProcessGuide() {
   const guide = document.createElement('section');
   guide.className = 'creator-blog-process';
@@ -34,6 +51,10 @@ function createBlogProcessGuide() {
   return guide;
 }
 
+/**
+ * 이미 만들어진 블로그 화면에 안내 문구와 디자인 요소를 덧붙인다.
+ * 맨 앞의 검사는 '중복 실행 방지'다. 화면을 여러 번 열어도 안내가 두 번 붙지 않게 한다.
+ */
 function decorateBlogView(container) {
   if (container.classList.contains('creator-blog-view')) return;
 
@@ -74,6 +95,7 @@ function decorateBlogView(container) {
     modeOptions.setAttribute('aria-labelledby', modeTitle.id);
   }
 
+  // 완전자동·예약발행은 실제로 글이 올라가는 모드이므로, 눈에 띄는 경고 문구를 붙인다.
   container.querySelectorAll('input[name="mode"]').forEach((radio) => {
     const option = radio.closest('.mode-option');
     option?.classList.add('creator-blog-mode-option');
@@ -128,6 +150,10 @@ function decorateBlogView(container) {
   container.prepend(createBlogProcessGuide());
 }
 
+/**
+ * 블로그 화면을 그린다. 두 앱 모두 이 함수 하나만 부르면 된다.
+ * 순서: 기능 화면 만들기(initMainView) → 디자인·안내 덧붙이기(decorateBlogView)
+ */
 export function initStyledBlogView(container) {
   initMainView(container);
   decorateBlogView(container);

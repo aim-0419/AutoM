@@ -1,10 +1,29 @@
+/**
+ * [블로그 콘텐츠 만들기 화면 - 이 프로그램에서 가장 많이 쓰는 화면]
+ *
+ * 비개발자를 위한 설명:
+ * - 사용자가 실제로 마주하는 메인 작업 화면입니다. 여기서 하는 일:
+ *     1) 키워드를 한 줄에 하나씩 입력 (또는 AI 추천 받기)
+ *     2) 발행 방식 4가지 중 선택 (반자동 / 확인 후 발행 / 완전자동 / 예약발행)
+ *     3) '생성 시작'을 누르면 진행 상황이 실시간으로 표시됨
+ *     4) 완성된 글을 미리보기로 확인하고, 필요하면 직접 고친 뒤 저장 또는 발행
+ *
+ * - 실제 AI 호출과 발행은 이 화면이 직접 하지 않습니다.
+ *   window.api를 통해 프로그램 내부(백엔드)에 요청하고, 결과만 받아 보여줍니다.
+ *
+ * - 안전장치: 완전자동과 예약발행은 실제로 글이 올라가므로, 처음 선택할 때
+ *   "정말 하시겠습니까?" 확인창을 띄웁니다.
+ */
+
 // 완전자동은 실제 글을 바로 발행하므로, 앱을 켠 뒤 처음 선택할 때만 확인창을 띄운다.
+// (매번 띄우면 번거로우므로 한 번만 확인하고 기억해 둔다)
 let fullAutoWarningShown = false;
 let scheduledWarningShown = false;
 
-const SCHEDULE_MIN_LEAD_MINUTES = 20;
-const SCHEDULE_MINUTE_STEP = 10;
-const SCHEDULE_MAX_DAYS = 365;
+// 예약 발행 규칙. 백엔드(core/schedule.js)와 같은 값을 써야 화면과 실제 동작이 일치한다.
+const SCHEDULE_MIN_LEAD_MINUTES = 20; // 지금부터 최소 20분 뒤
+const SCHEDULE_MINUTE_STEP = 10; // 10분 단위로만 예약 가능
+const SCHEDULE_MAX_DAYS = 365; // 최대 1년 뒤까지
 
 const STAGE_LABELS = {
   // 화면의 진행 상황에 표시되는 문구다.
@@ -75,6 +94,11 @@ function renderPreviewHtml(body, images) {
     .join('\n');
 }
 
+/**
+ * 자동 품질 점검 결과를 미리보기 위에 요약 상자로 보여준다.
+ * 색상으로 상태를 구분한다: 초록(통과) / 노랑(통과했지만 확인 권장) / 빨강(발행 중단)
+ * 아래에는 제목 글자 수, 본문 길이, 이미지 수 같은 측정값과 문제 목록이 표시된다.
+ */
 function renderQualitySummary(report) {
   // 생성 직후 검사한 결과를 미리보기 위에 요약해, 발행 전에 바로 확인할 수 있게 한다.
   // 오류는 발행을 막고, 경고는 사용자가 자연스러움을 검토할 수 있도록 알려 준다.
@@ -102,6 +126,7 @@ function renderQualitySummary(report) {
   `;
 }
 
+/** 시각을 다음 10분 단위로 올린다. (네이버 예약이 10분 단위만 허용하기 때문) */
 function roundUpToTenMinutes(date) {
   const rounded = new Date(date);
   rounded.setSeconds(0, 0);
@@ -112,6 +137,7 @@ function roundUpToTenMinutes(date) {
   return rounded;
 }
 
+/** 예약 가능한 시간 범위(가장 이른 시각 ~ 가장 늦은 시각)를 계산한다. */
 function getScheduleBounds() {
   return {
     minimum: roundUpToTenMinutes(new Date(Date.now() + SCHEDULE_MIN_LEAD_MINUTES * 60 * 1000)),
@@ -119,6 +145,11 @@ function getScheduleBounds() {
   };
 }
 
+// ── 예약 시각 선택 상자(년/월/일/시/분) 관리 ────────────────────
+// 지난 날짜나 1년 넘는 미래를 고를 수 없도록, 연도를 바꾸면 월 목록이,
+// 월을 바꾸면 일 목록이 자동으로 다시 계산됩니다.
+
+/** 선택 상자 안의 항목들을 다시 채운다. (예: 1~31일) */
 function populateSelectOptions(select, values, selectedValue) {
   select.replaceChildren();
   values.forEach((value) => {
@@ -130,6 +161,7 @@ function populateSelectOptions(select, values, selectedValue) {
   });
 }
 
+/** '일' 목록을 다시 만든다. 그 달의 날짜 수, 오늘 이전 제외, 1년 초과 제외를 모두 반영한다. */
 function updateScheduleDayOptions(container, preferredDay) {
   const { maximum } = getScheduleBounds();
   const today = new Date();
@@ -152,6 +184,7 @@ function updateScheduleDayOptions(container, preferredDay) {
   );
 }
 
+/** '월' 목록을 다시 만들고, 이어서 '일' 목록도 갱신한다. */
 function updateScheduleMonthOptions(container, preferredMonth, preferredDay) {
   const { maximum } = getScheduleBounds();
   const today = new Date();
@@ -172,6 +205,7 @@ function updateScheduleMonthOptions(container, preferredMonth, preferredDay) {
   updateScheduleDayOptions(container, preferredDay);
 }
 
+/** 선택한 년/월/일/시/분을 하나의 시각 문자열로 합친다. (예: 2026-08-12T14:10) */
 function getScheduleValue(container) {
   const getValue = (id) => container.querySelector(id).value;
   return `${getValue('#schedule-year')}-${getValue('#schedule-month')}-${getValue('#schedule-day')}T${getValue('#schedule-hour')}:${getValue('#schedule-minute')}`;
@@ -206,11 +240,19 @@ function initializeScheduleControl(container) {
   monthSelect.addEventListener('change', () => updateScheduleDayOptions(container, daySelect.value));
 }
 
+/** 예약발행 모드를 골랐을 때만 시각 선택 상자를 보여준다. */
 function syncScheduleVisibility(container) {
   const mode = container.querySelector('input[name="mode"]:checked')?.value;
   container.querySelector('#schedule-options').hidden = mode !== 'scheduled';
 }
 
+/**
+ * [화면 그리기] 메인 화면의 뼈대를 만든다.
+ *
+ * 구성: 키워드 입력칸 → 발행 모드 선택 → (예약 시각) → 생성 버튼 →
+ *       진행 상황 영역 → 결과 목록 영역 → 미리보기 영역
+ * 아래 세 영역(progress/results/preview)은 처음엔 비어 있다가 작업이 진행되면서 채워진다.
+ */
 export function initMainView(container) {
   // 메인 화면 전체를 그린다.
   // 사용자는 여기서 키워드를 입력하고, 발행 방식(반자동/확인 후 발행/완전자동)을 고른다.
@@ -279,6 +321,15 @@ export function initMainView(container) {
   wireEvents(container);
 }
 
+/**
+ * [동작 연결] 화면의 버튼과 선택 항목에 실제 기능을 연결한다.
+ *
+ * 연결하는 것들:
+ *  · 발행 모드 선택 → 위험 모드 확인창, 예약 시각 표시 여부
+ *  · 키워드 자동추천 버튼
+ *  · 생성 시작 버튼 (가장 핵심)
+ *  · 작업 중단 버튼
+ */
 function wireEvents(container) {
   // 메인 화면 버튼과 선택 항목에 실제 동작을 연결한다.
   container.querySelectorAll('input[name="mode"]').forEach((radio) => {
@@ -329,6 +380,11 @@ function wireEvents(container) {
   });
 }
 
+/**
+ * '키워드 자동추천' 버튼을 눌렀을 때 실행된다.
+ * AI가 새 키워드를 하나 제안하면 입력칸 맨 아래에 한 줄로 덧붙인다.
+ * (기존에 입력해 둔 키워드는 지우지 않는다)
+ */
 async function handleRecommendClick(container) {
   // 키워드 자동추천 버튼을 눌렀을 때 실행된다.
   // 이미 사용한 키워드는 제외하고 새 키워드를 추천받아 입력칸에 추가한다.
@@ -369,6 +425,20 @@ function getKeywords(container) {
     .filter(Boolean);
 }
 
+/**
+ * [핵심] '생성 시작' 버튼을 눌렀을 때의 전체 흐름이다.
+ *
+ * 시작 전 확인 사항 (하나라도 걸리면 시작하지 않음):
+ *   1) 키워드를 하나 이상 입력했는가
+ *   2) 입력 목록 안에 같은 키워드가 중복되지 않았는가
+ *   3) 예전에 쓴 키워드인가 → 자동·예약 발행이면 차단, 그 외에는 "계속할까요?" 확인
+ *   4) 자동·예약 발행이면 3개 이하인가
+ *   5) 예약발행이면 시각이 20분 이후인가
+ *
+ * 시작 후:
+ *   진행 상황 표시 시작 → 백엔드에 생성 요청 → 실시간 상태 갱신 → 결과 표시
+ *   버튼 잠금/해제와 상태 알림 해제는 finally에서 처리해, 오류가 나도 화면이 멈추지 않는다.
+ */
 async function handleGenerateClick(container) {
   // [생성 시작] 버튼의 전체 흐름이다.
   // 1. 키워드가 있는지 확인한다.
@@ -524,6 +594,11 @@ function markProgressFailed(container) {
   });
 }
 
+/**
+ * 생성이 끝난 뒤 결과 목록을 그린다.
+ * 완전자동·예약발행은 발행 결과 메시지만 보여주고,
+ * 반자동·확인 후 발행은 미리보기 버튼을 보여준 뒤 첫 번째 글을 자동으로 펼쳐준다.
+ */
 function renderResults(container, results, mode) {
   // 생성이 끝난 뒤 결과 목록을 그린다.
   // 완전자동은 발행 결과 메시지를 보여주고, 나머지 모드는 미리보기 버튼을 보여준다.
@@ -575,6 +650,18 @@ function renderResults(container, results, mode) {
   }
 }
 
+/**
+ * [미리보기 / 수정] 완성된 글을 확인하고 직접 고칠 수 있는 영역을 그린다.
+ *
+ * 화면 구성:
+ *  · 위쪽  : 자동 품질 점검 결과 요약
+ *  · 왼쪽  : 본문 원본 편집칸 (여기서 고치면)
+ *  · 오른쪽: 실제 블로그처럼 보이는 미리보기 (즉시 반영됨)
+ *  · 아래  : '폴더에 저장'(반자동) 또는 '발행'(확인 후 발행) 버튼
+ *
+ * 내용을 고치면 품질 점검 결과가 "수정되었습니다. 발행할 때 다시 점검합니다"로 바뀝니다.
+ * 실제로 발행 직전에 백엔드가 다시 검사하므로, 고친 내용도 안전 기준을 반드시 통과해야 합니다.
+ */
 function renderPreview(container, content, mode) {
   // 확인 후 발행/반자동 모드에서 사용자가 글을 검토하고 수정하는 영역이다.
   // 왼쪽은 원문 편집, 오른쪽은 실제 블로그처럼 보이는 미리보기다.

@@ -13,11 +13,17 @@ const keywordSchema = require('./keywordSchema');
 const instagramSchema = require('./instagramSchema');
 const youtubeSchema = require('./youtubeSchema');
 
-// Google Gemini용 연결 어댑터다. Gemini의 호출 문법을 이 파일 안에만 두고,
-// 나머지 프로그램은 모든 텍스트 AI를 동일한 방식으로 사용한다.
-const id = 'gemini';
-const label = 'Google Gemini';
-const defaultModel = 'gemini-3.5-flash';
+/**
+ * [Google Gemini 연결 어댑터]
+ *
+ * 비개발자를 위한 설명:
+ * - anthropic.js(Claude), openai.js(ChatGPT)와 하는 일이 완전히 같습니다.
+ *   Gemini만의 호출 문법을 이 파일 안에만 가둬 두어, 나머지 코드는 영향을 받지 않습니다.
+ * - 글의 규칙과 검수 기준은 공통 파일(articleSchema.js 등)이 정합니다.
+ */
+const id = 'gemini'; // 프로그램 내부 식별 이름
+const label = 'Google Gemini'; // 설정 화면 표시 이름
+const defaultModel = 'gemini-3.5-flash'; // 기본 모델
 
 async function testConnection({ apiKey, model }) {
   // 실제 모델 정보를 조회해 입력한 키와 모델이 작동하는지 확인한다.

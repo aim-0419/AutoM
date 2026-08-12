@@ -1,6 +1,21 @@
 /**
- * 주제를 바탕으로 인스타그램 카드 문구와 이미지를 생성하고 로컬 결과물을 만든다.
- * 실제 인스타그램 게시 작업은 publisher.js가 별도로 담당한다.
+ * [인스타그램 카드뉴스 제작 공정]
+ *
+ * 비개발자를 위한 설명:
+ * - 키워드 하나로 '카드뉴스'(옆으로 넘겨 보는 여러 장짜리 이미지 게시물)를 만듭니다.
+ *
+ * - 만드는 순서:
+ *     1) 글쓰기 AI에게 카드별 문구, 게시물 본문, 해시태그를 받는다.        (stage: writing)
+ *     2) 이미지 AI에게 카드마다 들어갈 배경 사진을 만든다. (2장씩 동시에)  (stage: illustrating)
+ *     3) 배경 사진 위에 글자를 얹어 최종 카드 이미지를 완성한다.           (stage: rendering)
+ *     4) 문구(caption.txt)와 정보(post.json)를 결과 폴더에 함께 저장한다.   (stage: done)
+ *
+ * - 3번의 '글자 얹기'는 어떻게 하나요?
+ *   포토샵 같은 그래픽 프로그램 대신, 웹페이지(HTML) 한 장을 만들고 그것을 화면 캡처합니다.
+ *   즉 "배경 사진 + 제목 + 설명"을 웹페이지로 그린 뒤 1080x1350 크기로 사진을 찍는 방식입니다.
+ *   웹 기술로 글자 크기·줄바꿈·그림자를 정교하게 다룰 수 있어 이 방법을 씁니다.
+ *
+ * - 실제 인스타그램 업로드는 이 파일이 아니라 publisher.js가 담당합니다.
  */
 const fs = require('node:fs');
 const path = require('node:path');
@@ -13,8 +28,10 @@ const { buildSafeImagePrompt } = require('../../core/pipeline');
 const { mapWithConcurrency } = require('../../core/concurrency');
 const { MIN_CARD_COUNT, MAX_CARD_COUNT, normalizeCardCount } = require('../../core/providers/text/instagramSchema');
 
+// 배경 이미지를 한 번에 몇 장씩 만들지. 2장씩이면 속도와 API 제한 사이의 균형이 좋다.
 const IMAGE_GENERATION_CONCURRENCY = 2;
 
+/** 사용자가 입력한 주제가 1~100자인지 확인하고 공백을 정리한다. */
 function validateKeyword(keyword) {
   const value = String(keyword || '').normalize('NFKC').replace(/\s+/g, ' ').trim();
   if (!value || [...value].length > 100) {
@@ -31,6 +48,11 @@ function validateCardCount(value) {
   return normalizeCardCount(count);
 }
 
+/**
+ * 결과물을 담을 폴더 이름을 만든다. 예) 2026-08-12T09-30-00-000Z_홈카페원두고르기
+ * 시간을 앞에 붙여 최신 작업이 목록 위쪽에 모이게 하고,
+ * 폴더 이름에 쓸 수 없는 문자(\ / : * ? " < > |)는 공백으로 바꾼다.
+ */
 function createJobFolderName(keyword) {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const safeKeyword = keyword
@@ -41,6 +63,11 @@ function createJobFolderName(keyword) {
   return `${timestamp}_${safeKeyword || 'instagram'}`;
 }
 
+/**
+ * 글자에 들어 있는 <, >, & 같은 기호를 안전한 형태로 바꾼다.
+ * 이 처리를 하지 않으면 AI가 쓴 문구 속 기호가 웹페이지 명령으로 잘못 해석되어
+ * 카드 디자인이 깨질 수 있다.
+ */
 function escapeHtml(value) {
   return String(value || '')
     .replace(/&/g, '&amp;')
@@ -54,6 +81,18 @@ function toDataUri(imagePath) {
   return `data:image/png;base64,${fs.readFileSync(imagePath).toString('base64')}`;
 }
 
+/**
+ * 카드 한 장의 디자인을 웹페이지(HTML) 형태로 그린다. 이 페이지를 캡처하면 카드 이미지가 된다.
+ *
+ * 카드 구성 (위에서 아래로):
+ *   · 배경 사진 위에 어두운 반투명 막을 덮어 글자가 잘 보이게 한다 (rgba(6,10,16,0.60))
+ *   · 상단 라벨   : 첫 장은 'SAVE THIS', 나머지는 'POINT 02' 형식
+ *   · 큰 제목     : 첫 장은 카드뉴스 전체 제목, 나머지는 그 카드의 소제목
+ *   · 설명 문장
+ *   · 하단        : 'AUTOM CREATOR' 표시와 '02 / 05' 같은 장수 표시
+ *
+ * 크기 1080x1350은 인스타그램 세로형 게시물의 권장 규격이다.
+ */
 function renderCardHtml({ title, card, cardIndex, cardCount, backgroundDataUri }) {
   const displayTitle = cardIndex === 1 ? title : card.headline;
   const eyebrow = cardIndex === 1 ? 'SAVE THIS' : `POINT ${String(cardIndex).padStart(2, '0')}`;
@@ -103,6 +142,12 @@ function buildBackgroundPrompt(card) {
   );
 }
 
+/**
+ * 카드 이미지를 실제로 만들어 낸다.
+ *
+ * 방법: 화면에 보이지 않는 브라우저(headless)를 하나 띄우고, 카드 HTML을 표시한 뒤
+ *       그 화면을 PNG로 캡처해 저장한다. 카드 수만큼 반복한다.
+ */
 async function renderCards(cards, title, workDir, onProgress) {
   // 설치본에는 로그인 창과 카드 합성에 함께 쓰는 일반 Chromium이 들어 있다.
   // 실행 파일을 직접 지정하면 Playwright가 별도의 headless shell을 찾지 않아
@@ -141,6 +186,12 @@ async function renderCards(cards, title, workDir, onProgress) {
   }
 }
 
+/**
+ * 결과 폴더에 부가 파일 2개를 저장한다.
+ *  · caption.txt : 인스타그램에 붙여넣을 본문 글 (본문 + 마무리 문장 + 해시태그)
+ *  · post.json   : 나중에 프로그램이 다시 읽을 수 있도록 정리한 상세 정보
+ * 자동 발행을 쓰지 않고 직접 올리고 싶은 사용자는 caption.txt만 복사하면 된다.
+ */
 function writeBundle(workDir, content) {
   const captionText = `${content.caption}\n\n${content.callToAction}\n\n${content.tags.map((tag) => `#${tag}`).join(' ')}`;
   fs.writeFileSync(path.join(workDir, 'caption.txt'), captionText, 'utf8');
@@ -169,6 +220,10 @@ function writeBundle(workDir, content) {
   return captionText;
 }
 
+/**
+ * [메인 함수] 키워드 하나로 카드뉴스 한 세트를 완성한다.
+ * 화면의 '카드뉴스 만들기' 버튼이 최종적으로 실행하는 기능이다.
+ */
 async function generateCarousel({ keyword, cardCount, settings, onProgress }) {
   const normalizedKeyword = validateKeyword(keyword);
   const normalizedCardCount = validateCardCount(cardCount);

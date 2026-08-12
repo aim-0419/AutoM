@@ -3,11 +3,17 @@ const path = require('node:path');
 const { GoogleGenAI } = require('@google/genai');
 const { toKoreanErrorMessage } = require('../errorMessage');
 
-// Google Gemini 이미지 생성용 어댑터다. Gemini가 준 이미지 데이터를 PNG 파일로 저장해
-// 다른 이미지 공급자와 같은 결과 형태로 돌려준다.
-const id = 'gemini';
-const label = 'Google Gemini (Nano Banana)';
-const defaultModel = 'gemini-3.1-flash-image';
+/**
+ * [Google Gemini 이미지 생성 어댑터]
+ *
+ * 비개발자를 위한 설명:
+ * - OpenAI 이미지 어댑터와 하는 일이 같습니다. 설명문을 보내 그림을 받고 PNG로 저장합니다.
+ * - Gemini는 호출 방식이 OpenAI와 다르지만, 이 파일이 그 차이를 흡수하기 때문에
+ *   프로그램의 나머지 부분은 "그림을 만들어 이 경로에 저장해줘" 한 가지만 부르면 됩니다.
+ */
+const id = 'gemini'; // 프로그램 내부 식별 이름
+const label = 'Google Gemini (Nano Banana)'; // 설정 화면 표시 이름
+const defaultModel = 'gemini-3.1-flash-image'; // 기본 이미지 모델
 
 async function testConnection({ apiKey, model }) {
   // 선택한 모델 정보를 실제로 조회해 설정값을 사전에 확인한다.

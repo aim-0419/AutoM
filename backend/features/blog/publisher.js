@@ -1,6 +1,22 @@
 /**
- * 완성된 글과 이미지를 네이버 스마트에디터에 입력하고 발행하는 자동화 모듈이다.
- * 화면 위치를 찾는 규칙은 selectors.js, 로그인 정보는 session.js가 맡는다.
+ * [네이버 블로그 자동 발행기]
+ *
+ * 비개발자를 위한 설명:
+ * - 네이버는 외부 프로그램이 글을 올릴 수 있는 공식 통로(API)를 제공하지 않습니다.
+ *   그래서 이 프로그램은 '사람이 하던 일을 그대로 흉내내는' 방식을 씁니다.
+ *   즉, 브라우저 창을 열고 → 글쓰기 페이지에 들어가 → 제목을 입력하고 → 본문을 붙여넣고 →
+ *   사진을 업로드하고 → 태그를 넣고 → 발행 버튼을 누릅니다. 전부 자동입니다.
+ *
+ * - 발행 순서(stage)는 아래와 같으며, 실패하면 "어느 단계에서 멈췄는지"를 알려줍니다.
+ *     로그인 확인 → 글쓰기 페이지 진입 → 이어작성 팝업 처리 → 제목 입력 → 본문 입력 →
+ *     발행 설정 열기 → 카테고리 → 공개 설정 → 태그 → (예약 시간) → 최종 발행 → 완료 확인
+ *
+ * - 중요한 안전장치 2가지:
+ *     1) 발행 성공은 '버튼을 눌렀는가'가 아니라 '실제 글 주소가 생겼는가'로 판단합니다.
+ *     2) 마지막 발행 버튼을 누른 뒤 실패하면 재시도하지 않습니다.
+ *        글이 이미 올라갔을 수도 있어, 다시 시도하면 같은 글이 두 번 올라가기 때문입니다.
+ *
+ * - 관련 파일: 화면 요소를 찾는 규칙은 selectors.js, 로그인 관리는 session.js가 담당합니다.
  */
 const fs = require('node:fs');
 const path = require('node:path');
@@ -10,23 +26,32 @@ const selectors = require('./selectors');
 const logger = require('../../shared/logger');
 const { toLocalScheduleParts } = require('../../core/schedule');
 
-/**
- * Playwright를 이용해 네이버 블로그 스마트에디터를 실제 브라우저처럼 조작하는 발행기다.
- * 제목, 본문, 이미지, 카테고리, 공개 설정, 태그를 입력한 뒤 게시물 URL로 이동했는지 확인한다.
- */
-// 실제 에디터 폭을 읽지 못했을 때 쓰는 기본값이다. 기존 26자는 본문 폭의 절반 정도만 사용했다.
-const DEFAULT_READABLE_LINE_MAX_CHARS = 42;
-const MIN_READABLE_LINE_MAX_CHARS = 32;
-const MAX_READABLE_LINE_MAX_CHARS = 52;
-const READABLE_LINE_TARGET_RATIO = 0.9;
+// ── 본문 줄바꿈 설정 ────────────────────────────────────────────
+// 네이버 에디터는 긴 줄을 알아서 접지만, 그러면 단어 중간에서 잘려 읽기 불편합니다.
+// 그래서 미리 적당한 길이에서 직접 줄을 나눠 넣습니다. 아래는 그 기준 글자 수입니다.
+const DEFAULT_READABLE_LINE_MAX_CHARS = 42; // 에디터 폭을 못 읽었을 때 쓰는 기본 줄 길이
+const MIN_READABLE_LINE_MAX_CHARS = 32; // 너무 짧게 끊기지 않도록 하는 하한
+const MAX_READABLE_LINE_MAX_CHARS = 52; // 너무 길게 늘어지지 않도록 하는 상한
+const READABLE_LINE_TARGET_RATIO = 0.9; // 에디터 폭의 90%만 사용 (여백을 남겨 안정적으로)
 
 function randomDelay(min = 1000, max = 3000) {
   // 네이버 에디터 화면은 클릭 직후 바로 다음 요소가 준비되지 않을 때가 있다.
   // 사람이 천천히 조작하는 것처럼 잠깐 기다려서 입력/클릭 실패를 줄인다.
+  // 매번 조금씩 다른 시간(예: 1.2초, 2.7초)을 기다리는 이유는 기계적인 일정 간격보다
+  // 자연스럽고, 네이버 화면이 준비될 시간도 충분히 벌어주기 때문이다.
   const ms = min + Math.random() * (max - min);
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * 발행이 실패한 순간의 '증거'를 남긴다.
+ *
+ * 무엇을 남기나요?
+ *  - 그 순간의 화면 캡처(.png)와 페이지 구조(.html)를 logs 폴더에 저장합니다.
+ * 왜 필요한가요?
+ *  - 자동화는 눈에 보이지 않게 진행되므로, 실패하면 원인을 알기 어렵습니다.
+ *    캡처를 보면 "로그인이 풀렸구나", "네이버 화면이 바뀌었구나"를 바로 알 수 있습니다.
+ */
 async function saveFailureArtifacts(page, stage) {
   // 발행 실패 시 그 순간의 화면 이미지와 HTML을 저장한다.
   // 네이버 화면 구조가 바뀌었는지, 로그인 문제가 있었는지 나중에 눈으로 확인하기 위해서다.
@@ -210,6 +235,13 @@ function extractCompletedPostUrl(value, blogId) {
   }
 }
 
+/**
+ * 발행이 '정말로' 끝났는지 확인한다. (최대 20초 대기)
+ *
+ * 확인 방법: 0.3초마다 현재 주소를 살펴, 새 게시물 번호가 붙은 내 블로그 주소로
+ *            바뀌었는지 본다. 끝내 안 바뀌면 실패로 처리한다.
+ * 이렇게 하는 이유: 발행 버튼 클릭이 성공했다고 해서 글이 올라간 것은 아니기 때문이다.
+ */
 async function waitForPublishCompletion(page, blogId, timeoutMs = 20000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -225,6 +257,13 @@ async function waitForPublishCompletion(page, blogId, timeoutMs = 20000) {
   throw new Error('네이버가 새 게시물 번호를 반환하지 않아 발행 완료를 확인할 수 없습니다.');
 }
 
+/**
+ * 예약 발행 시간을 네이버 화면에 입력한다.
+ *
+ * 순서: '예약' 선택 → 달력 열기 → 원하는 달까지 '다음달' 버튼 클릭 → 날짜 클릭 →
+ *       시/분 선택 → 마지막으로 입력값이 의도대로 들어갔는지 다시 읽어서 확인
+ * 마지막 확인 단계가 중요한 이유: 클릭이 빗나가면 엉뚱한 날짜로 예약될 수 있기 때문이다.
+ */
 async function configureScheduledPublish(editorFrame, page, scheduleAt) {
   const scheduleDate = new Date(scheduleAt);
   if (Number.isNaN(scheduleDate.getTime()) || scheduleDate.getTime() <= Date.now() + 2 * 60 * 1000) {
@@ -327,6 +366,7 @@ async function insertImageAt(editorFrame, page, imagePath) {
 
 async function pasteText(page, text) {
   // 긴 문장은 키보드로 한 글자씩 치는 것보다 클립보드 붙여넣기가 더 안정적이다.
+  // (한글은 자음·모음 조합 과정에서 글자가 깨질 수 있어, 복사·붙여넣기가 훨씬 정확하다)
   if (!text) {
     return;
   }
@@ -355,6 +395,16 @@ async function typeLineWithInlineBold(page, line) {
   await typeSegments(page, splitInlineBoldSegments(line));
 }
 
+/**
+ * 본문을 한 줄씩 읽어 네이버 에디터에 입력한다.
+ *
+ * 줄의 종류에 따라 처리가 다르다.
+ *   [IMAGE_1]  → 글자 대신 해당 번호의 사진을 업로드
+ *   ## 소제목  → 네이버 에디터에는 소제목 기능이 없어 '굵게'로 대체
+ *   http://... → 링크가 깨지지 않도록 줄바꿈 없이 통째로 입력
+ *   일반 문장  → 읽기 좋은 길이로 나눠서 입력 (**굵게** 표시가 있으면 그 부분만 굵게)
+ *   빈 줄      → 엔터만 눌러 문단 사이를 띄움
+ */
 async function typeBodyWithImages(editorFrame, page, body, images) {
   // 본문은 줄 단위로 읽으면서 네이버 에디터에 입력한다.
   // [IMAGE_1] 줄을 만나면 글자 대신 해당 번호의 이미지를 업로드한다.

@@ -1,9 +1,18 @@
+/**
+ * [글쓰기 AI 목록 - 어떤 AI를 쓸지 고르는 곳]
+ *
+ * 비개발자를 위한 설명:
+ * - 이 프로그램은 글쓰기 AI로 Claude(Anthropic), ChatGPT(OpenAI), Gemini(Google) 셋 중
+ *   하나를 골라 쓸 수 있습니다. 사용자는 설정 화면에서 API 키를 넣은 회사를 선택합니다.
+ * - 세 회사는 서로 사용법이 다르지만, 이 프로그램 안에서는 전부 똑같은 방식으로 부를 수 있도록
+ *   각각 별도의 '어댑터' 파일(anthropic.js / openai.js / gemini.js)로 감싸두었습니다.
+ *   덕분에 나중에 AI를 바꿔도 나머지 코드는 손댈 필요가 없습니다.
+ * - 새 AI 회사를 추가하려면 어댑터 파일을 하나 만들고 아래 목록에 등록하면 됩니다.
+ */
 const anthropic = require('./anthropic');
 const openai = require('./openai');
 const gemini = require('./gemini');
 
-// 선택 가능한 텍스트 AI를 한곳에 모아 두는 목록이다.
-// 새로운 공급자를 추가할 때는 이 목록에 넣으면 설정 화면과 생성 과정에서 함께 인식한다.
 const providers = { anthropic, openai, gemini };
 
 function list() {
