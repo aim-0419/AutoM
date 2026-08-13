@@ -29,6 +29,7 @@ const pipeline = require('../backend/core/pipeline');
 const schedule = require('../backend/core/schedule');
 const { normalizeSettings } = require('../backend/core/settingsValidation');
 const naverPublisher = require('../backend/features/blog/publisher');
+const naverSession = require('../backend/features/blog/session');
 const ipc = require('../backend/shared/ipc');
 
 function buildValidBody() {
@@ -518,4 +519,191 @@ test('완전자동 대량·중복 입력을 막고 대기 중 취소 요청을 �
     Date.now = originalNow;
     global.setTimeout = originalSetTimeout;
   }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 네이버 로그인 유지 관련 검사
+//
+// 배포 후 실제로 발생한 문제를 막기 위한 테스트다.
+// "로그인은 성공했다고 표시되는데 발행할 때 로그인이 풀려 있다"는 증상의 원인은,
+// 로그인 쿠키가 '세션 쿠키'로만 발급되어 브라우저를 닫는 순간 사라지는 것이었다.
+// 아래 테스트는 그 상황을 프로그램이 정확히 알아채는지 확인한다.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 저장된 쿠키를 흉내내는 가짜 브라우저 컨텍스트를 만든다. */
+function createFakeContext(cookies, { pages = [] } = {}) {
+  let pageIndex = 0;
+  return {
+    cookies: async () => cookies,
+    newPage: async () => pages[pageIndex++] || { goto: async () => {}, url: () => '', close: async () => {} },
+  };
+}
+
+/** 페이지 이동을 흉내내는 가짜 페이지를 만든다. */
+function createFakePage({ landingUrl, failWith } = {}) {
+  return {
+    goto: async () => {
+      if (failWith) throw new Error(failWith);
+    },
+    url: () => landingUrl || '',
+    close: async () => {},
+  };
+}
+
+test('로그인 쿠키가 세션 전용이면 유지되지 않는 로그인으로 판정한다', async () => {
+  const { inspectStoredLoginCookies } = naverSession._test;
+  const future = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30;
+  const naver = (name, expires) => ({ name, value: 'x', expires, domain: '.naver.com' });
+
+  // 정상: 만료 날짜가 있는 지속 쿠키
+  const durable = await inspectStoredLoginCookies(createFakeContext([naver('NID_AUT', future), naver('NID_SES', future)]));
+  assert.equal(durable.durable, true);
+  assert.equal(durable.sessionOnly, false);
+
+  // 실제 정상 프로필 확인 결과 NID_SES만 저장된 경우도 정상 동작했다.
+  // 둘 다 요구하면 멀쩡한 사용자를 잘못 막게 되므로 하나만 있어도 통과해야 한다.
+  const sesOnly = await inspectStoredLoginCookies(
+    createFakeContext([naver('NID_SES', future), { name: 'NID_JST', value: 'x', expires: future, domain: '.nid.naver.com' }])
+  );
+  assert.equal(sesOnly.durable, true, 'NID_SES 하나만 있어도 유지되는 로그인으로 봐야 한다');
+  assert.deepEqual(sesOnly.found, ['NID_SES']);
+
+  // 문제 상황: 값은 있으나 만료 날짜가 없는 세션 쿠키(Playwright는 -1로 알려준다)
+  const sessionOnly = await inspectStoredLoginCookies(createFakeContext([naver('NID_AUT', -1), naver('NID_SES', -1)]));
+  assert.equal(sessionOnly.durable, false);
+  assert.equal(sessionOnly.sessionOnly, true);
+
+  // 로그인과 무관한 쿠키만 있는 상태 (실제로 문제가 된 Creator 프로필의 모습)
+  const noAuth = await inspectStoredLoginCookies(
+    createFakeContext([
+      { name: 'NID_JST', value: 'x', expires: future, domain: '.nid.naver.com' },
+      { name: 'nid_slevel', value: 'x', expires: future, domain: '.nid.naver.com' },
+      { name: 'NNB', value: 'x', expires: future, domain: '.naver.com' },
+    ])
+  );
+  assert.equal(noAuth.durable, false);
+  assert.equal(noAuth.missing, true);
+
+  // 쿠키가 아예 없는 상태
+  const empty = await inspectStoredLoginCookies(createFakeContext([]));
+  assert.equal(empty.durable, false);
+  assert.equal(empty.missing, true);
+});
+
+test('로그인 확인은 만료·네트워크 문제를 구분하고 쿠키가 없으면 접속하지 않는다', async () => {
+  const future = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30;
+  const durableCookies = [
+    { name: 'NID_AUT', value: 'a', expires: future, domain: '.naver.com' },
+    { name: 'NID_SES', value: 'b', expires: future, domain: '.naver.com' },
+  ];
+
+  // 쿠키가 없으면 네트워크 접속 없이 즉시 로그아웃으로 판정해야 한다.
+  let pageCreated = 0;
+  const noCookieContext = {
+    cookies: async () => [],
+    newPage: async () => {
+      pageCreated += 1;
+      return createFakePage({ landingUrl: 'https://blog.naver.com/example' });
+    },
+  };
+  const noCookie = await naverSession.checkLoginStatus(noCookieContext, 'example');
+  assert.equal(noCookie.state, 'logged-out');
+  assert.equal(pageCreated, 0, '쿠키가 없으면 페이지를 열지 않아야 한다');
+
+  // 세션 쿠키뿐이면 "로그인 상태 유지" 안내를 담은 로그아웃으로 판정한다.
+  const sessionOnly = await naverSession.checkLoginStatus(
+    createFakeContext([
+      { name: 'NID_AUT', value: 'a', expires: -1, domain: '.naver.com' },
+      { name: 'NID_SES', value: 'b', expires: -1, domain: '.naver.com' },
+    ]),
+    'example'
+  );
+  assert.equal(sessionOnly.state, 'logged-out');
+  assert.match(sessionOnly.message, /로그인 상태 유지/);
+
+  // 글쓰기 페이지가 열리면 로그인 상태다.
+  const loggedIn = await naverSession.checkLoginStatus(
+    createFakeContext(durableCookies, {
+      pages: [createFakePage({ landingUrl: 'https://blog.naver.com/example?Redirect=Write&' })],
+    }),
+    'example'
+  );
+  assert.equal(loggedIn.state, 'logged-in');
+
+  // 로그인 페이지로 튕기면 실제로 만료된 것이다.
+  const expired = await naverSession.checkLoginStatus(
+    createFakeContext(durableCookies, {
+      pages: [createFakePage({ landingUrl: 'https://nid.naver.com/nidlogin.login' })],
+    }),
+    'example'
+  );
+  assert.equal(expired.state, 'logged-out');
+  assert.match(expired.message, /다시 로그인/);
+
+  // 접속 실패는 로그아웃이 아니라 '확인 불가'여야 한다. 두 번 시도한 뒤 판단한다.
+  const failingPages = [
+    createFakePage({ failWith: 'net::ERR_TIMED_OUT' }),
+    createFakePage({ failWith: 'net::ERR_TIMED_OUT' }),
+  ];
+  const unknown = await naverSession.checkLoginStatus(
+    createFakeContext(durableCookies, { pages: failingPages }),
+    'example'
+  );
+  assert.equal(unknown.state, 'unknown');
+  assert.match(unknown.message, /인터넷 연결/);
+});
+
+test('"로그인 상태 유지"는 켜진 것을 확인할 때까지 다시 시도한다', async () => {
+  const { ensureKeepLoginChecked, KEEP_LOGIN_TOGGLE, KEEP_LOGIN_INPUT } = naverSession._test;
+
+  /** 체크박스 상태를 흉내내는 가짜 로그인 페이지 */
+  function createLoginPage({ checkedAfterClicks = 1, visible = true }) {
+    const state = { clicks: 0, checked: false, waits: 0 };
+    const page = {
+      state,
+      waitForTimeout: async () => {
+        state.waits += 1;
+      },
+      locator: (selector) => {
+        if (selector === KEEP_LOGIN_INPUT) {
+          return { isChecked: async () => state.checked };
+        }
+        if (selector === KEEP_LOGIN_TOGGLE) {
+          return {
+            waitFor: async () => {
+              if (!visible) throw new Error('요소를 찾지 못했습니다.');
+            },
+            click: async () => {
+              state.clicks += 1;
+              if (state.clicks >= checkedAfterClicks) state.checked = true;
+            },
+            getAttribute: async () => (state.checked ? 'true' : 'false'),
+          };
+        }
+        throw new Error(`예상하지 못한 선택자: ${selector}`);
+      },
+    };
+    return page;
+  }
+
+  // 한 번에 켜지는 경우
+  const easy = createLoginPage({ checkedAfterClicks: 1 });
+  assert.equal(await ensureKeepLoginChecked(easy), true);
+  assert.equal(easy.state.clicks, 1);
+
+  // 화면이 늦게 준비되어 첫 클릭이 반영되지 않는 경우에도 재시도로 켜져야 한다.
+  // (예전 코드는 한 번 실패하면 그냥 넘어가서 로그인이 유지되지 않았다.)
+  const slow = createLoginPage({ checkedAfterClicks: 2 });
+  assert.equal(await ensureKeepLoginChecked(slow), true);
+  assert.equal(slow.state.clicks, 2);
+
+  // 이미 켜져 있으면 다시 누르지 않는다. (한 번 더 누르면 오히려 꺼진다.)
+  const already = createLoginPage({ checkedAfterClicks: 1 });
+  already.state.checked = true;
+  assert.equal(await ensureKeepLoginChecked(already), true);
+  assert.equal(already.state.clicks, 0);
+
+  // 끝내 켜지 못하면 false를 돌려주어 사용자에게 직접 켜라고 안내할 수 있어야 한다.
+  const broken = createLoginPage({ visible: false });
+  assert.equal(await ensureKeepLoginChecked(broken, { attempts: 2 }), false);
 });

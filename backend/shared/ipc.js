@@ -159,6 +159,40 @@ function validateProviderKeys(settings) {
   resolveConfiguredProvider(settings, 'image', imageProviders);
 }
 
+/**
+ * 자동·예약 발행을 시작하기 전에 네이버 쪽 준비 상태를 미리 확인한다.
+ *
+ * 왜 필요한가요?
+ * 글과 이미지를 만드는 데는 실제 AI 요금이 듭니다. 다 만든 뒤 발행 단계에서
+ * "블로그 ID가 없다" 또는 "로그인이 안 되어 있다"를 알게 되면 그 비용이 전부 낭비됩니다.
+ * 그래서 돈이 들기 전에 여기서 먼저 막습니다.
+ *
+ * 로그인 확인은 네이버에 접속하지 않고 저장된 쿠키만 봅니다.
+ * 빠르고, 인터넷이 잠시 느려도 오판하지 않습니다.
+ * 다만 확인 자체가 불가능한 경우(unknown)에는 사용자의 작업을 막지 않고 진행시킵니다.
+ * 잘못 막는 것이 그냥 진행하는 것보다 더 나쁘기 때문입니다.
+ */
+async function assertReadyForAutomatedPublishing(settings) {
+  if (!settings.naver.blogId) {
+    throw new Error(
+      '설정에서 네이버 블로그 ID를 먼저 입력해주세요. 발행 주소를 만들 때 필요합니다.'
+    );
+  }
+
+  const login = await naverSession.hasDurableLogin();
+  if (login.unknown) {
+    logger.error(`네이버 로그인 사전 확인 불가: ${login.message}`);
+    return;
+  }
+  if (!login.durable) {
+    throw new Error(
+      login.sessionOnly
+        ? '네이버 로그인이 유지되지 않는 상태입니다. 설정에서 다시 로그인할 때 "로그인 상태 유지"를 켠 채로 진행해주세요.'
+        : '설정에서 네이버 로그인을 먼저 해주세요. 자동·예약 발행은 로그인이 유지된 상태에서만 실행할 수 있습니다.'
+    );
+  }
+}
+
 function loadSettingsWithProviderRepair() {
   // 선택 공급자에는 키가 없고 저장된 키가 하나뿐이면 그 공급자로 설정을 바로잡는다.
   // 예: OpenAI 키만 저장했는데 기본 선택이 Anthropic으로 남은 경우를 자동 복구한다.
@@ -285,13 +319,26 @@ function registerIpcHandlers(getMainWindow) {
 
   ipcMain.handle('naver:login', async () => {
     // 로그인 창은 별도 Chromium 창으로 열고, 성공 여부만 화면에 돌려준다.
+    //
+    // 중요: '로그인 화면을 벗어났다'는 것만으로 성공 처리하지 않는다.
+    // 브라우저를 껐다 켜도 유지되는 로그인(durable)일 때만 연결됨으로 저장한다.
+    // 그러지 않으면 설정 화면에는 "연결됨"으로 보이는데 발행 단계에서 로그인이 풀려,
+    // 사용자가 원인을 알 수 없는 실패를 겪게 된다.
     try {
-      const loggedIn = await naverSession.login();
-      store.saveSettings({ naver: { loggedIn } });
-      return loggedIn
-        ? { success: true, message: '네이버 로그인에 성공했습니다.' }
-        : { success: false, message: '로그인 창이 닫혔거나 시간이 초과되었습니다. 다시 시도해주세요.' };
+      const result = await naverSession.login();
+      store.saveSettings({ naver: { loggedIn: result.durable === true } });
+
+      if (result.durable) {
+        return { success: true, message: result.message };
+      }
+
+      if (result.loggedIn) {
+        // 로그인은 됐지만 유지되지 않는 상태다. 그대로 두면 발행할 때 실패하므로 실패로 안내한다.
+        logger.error(`네이버 로그인 유지 실패: keepChecked=${result.keepChecked} / ${result.message}`);
+      }
+      return { success: false, message: result.message };
     } catch (err) {
+      logger.error(`네이버 로그인 실패: ${err.message}`);
       return { success: false, message: err.message || '네이버 로그인 중 오류가 발생했습니다.' };
     }
   });
@@ -424,6 +471,11 @@ function registerIpcHandlers(getMainWindow) {
     validateBatchRequest(keywords, mode, historyEntries);
     const normalizedScheduleStart = mode === 'scheduled' ? schedule.normalizeScheduleAt(scheduleAt) : null;
     validateProviderKeys(settings);
+    // 자동·예약 발행은 사람이 중간에 확인하지 않으므로, 돈이 드는 생성을 시작하기 전에
+    // 네이버 준비 상태(블로그 ID, 유지되는 로그인)를 먼저 확인한다.
+    if (mode === 'full-auto' || mode === 'scheduled') {
+      await assertReadyForAutomatedPublishing(settings);
+    }
     if (activeBatch) {
       throw new Error('이미 생성 또는 발행 작업이 진행 중입니다.');
     }

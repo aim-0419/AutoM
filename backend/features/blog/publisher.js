@@ -464,17 +464,32 @@ async function typeBodyWithImages(editorFrame, page, body, images) {
 async function attemptPublish(content, { blogId, settings, scheduleAt = null }) {
   // 실제 네이버 발행 1회 시도다.
   // Playwright가 별도 브라우저를 열고, 사람이 네이버 블로그 글쓰기 화면에서 하는 일을 순서대로 대신한다.
-  let stage = '로그인 확인';
+  let stage = '브라우저 실행';
   let finalPublishStarted = false;
-  const context = await session.launchPersistentContext();
+  let context;
   let page;
 
   try {
-    const loggedIn = await session.isLoggedIn(context, blogId);
-    if (!loggedIn) {
+    // 브라우저 실행도 실패할 수 있으므로(보안 프로그램 차단 등) 검사 범위 안에 둔다.
+    context = await session.launchPersistentContext();
+
+    stage = '로그인 확인';
+    const loginStatus = await session.checkLoginStatus(context, blogId);
+    if (loginStatus.state !== 'logged-in') {
       // 로그인 세션이 없으면 글쓰기 화면에 접근할 수 없으므로 발행을 멈춘다.
-      await context.close();
-      return { success: false, message: '설정에서 네이버 로그인을 먼저 해주세요.', stage, retryable: false };
+      // 원인이 '로그인 만료'인지 '네트워크 문제'인지 구분해, 사용자가 할 일을 정확히 알려 준다.
+      const isNetworkIssue = loginStatus.state === 'unknown';
+      await saveFailureArtifacts(context.pages()[0], stage);
+      logger.error(`네이버 발행 실패 [${stage}] ${loginStatus.state}: ${loginStatus.message}`);
+      await context.close().catch(() => {});
+      return {
+        success: false,
+        message: loginStatus.message,
+        stage,
+        // 네트워크 문제는 잠시 뒤 되는 경우가 있어 한 번 더 시도할 값어치가 있다.
+        // 로그인 만료는 다시 시도해도 결과가 같으므로 재시도하지 않는다.
+        retryable: isNetworkIssue,
+      };
     }
 
     stage = '글쓰기 페이지 진입';
@@ -580,8 +595,9 @@ async function attemptPublish(content, { blogId, settings, scheduleAt = null }) 
     return { success: true, url: publishedUrl, scheduledAt: null, message: `네이버 블로그에 발행되었습니다: ${publishedUrl}` };
   } catch (err) {
     // 어느 단계에서 실패했는지 stage에 담아 사용자와 개발자가 원인을 찾기 쉽게 한다.
+    // 브라우저 실행 자체가 실패했다면 context가 없을 수 있으므로 ?. 로 안전하게 처리한다.
     await saveFailureArtifacts(page, stage);
-    await context.close().catch(() => {});
+    await context?.close().catch(() => {});
     logger.error(`네이버 발행 실패 [${stage}]: ${err.message}`);
     // 마지막 발행 버튼 이후에는 실제로 글이 올라갔을 가능성이 있다.
     // 이때 재시도하면 중복 글이 생길 수 있어 자동 재시도를 막는다.
