@@ -2,7 +2,7 @@
  * [설정 화면 '꾸미기' 담당 - 두 앱 공통]
  *
  * 비개발자를 위한 설명:
- * - 설정 저장/불러오기 같은 실제 기능은 blog/views/settings.js가 담당합니다.
+ * - 설정 저장/불러오기 같은 실제 기능은 같은 폴더의 base.js가 담당합니다.
  *   이 파일은 그 위에 설명 문구와 주의 안내를 덧붙여 이해하기 쉽게 만듭니다.
  * - 특히 '연결 테스트' 버튼은 실제 AI 서비스에 요청을 보내 요금이 발생할 수 있으므로,
  *   각 구역마다 그 점을 명확히 안내합니다.
@@ -10,7 +10,7 @@
  *     true (Creator)  : "블로그, 인스타그램, 유튜브의 문구와 대본 생성에 사용..."
  *     false(블로그 앱): "네이버 블로그 제목과 본문 생성에 사용..."
  */
-import { initSettingsView as initBaseSettingsView } from '../../blog/views/settings.js';
+import { initSettingsView as initBaseSettingsView } from './base.js';
 
 /** 앱 종류에 맞는 설명 문구를 돌려준다. (Creator는 3개 플랫폼, 블로그 앱은 블로그만 언급) */
 function getSettingsSectionCopy(includeInstagram) {

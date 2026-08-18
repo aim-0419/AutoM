@@ -19,6 +19,10 @@
 // 최신 번호가 아니면 그 결과는 버린다.
 const dashboardRenderVersions = new WeakMap();
 
+// 화면 오른쪽 위 시계를 1분마다 갱신하기 위한 타이머를 화면별로 기억해 둔다.
+// 기억해 두지 않으면 대시보드를 열 때마다 타이머가 하나씩 쌓여 계속 늘어난다.
+const dashboardClockTimers = new WeakMap();
+
 // 플랫폼별로 화면에 표시할 이름
 const platformMeta = {
   blog: {
@@ -793,9 +797,35 @@ function renderDashboardShell(container) {
     </div>
   `;
 
-  const clock = formatDashboardClock();
-  setText(container, '#creator-dashboard-current-date', clock.date);
-  setText(container, '#creator-dashboard-current-time', clock.time);
+  startDashboardClock(container);
+}
+
+/**
+ * 화면 오른쪽 위의 '현재 한국 날짜와 시간'을 실제로 흐르게 한다.
+ *
+ * 예전에는 화면을 그릴 때 시각을 한 번만 찍어 두어서, 대시보드를 켜 둔 채로 있으면
+ * 시계가 멈춘 것처럼 보였다. 이제 1분마다 다시 표시한다.
+ * 대시보드를 벗어나면(화면이 사라지면) 타이머도 스스로 정리해 자원을 낭비하지 않는다.
+ */
+function startDashboardClock(container) {
+  const paint = () => {
+    const clock = formatDashboardClock();
+    setText(container, '#creator-dashboard-current-date', clock.date);
+    setText(container, '#creator-dashboard-current-time', clock.time);
+  };
+  paint();
+
+  clearInterval(dashboardClockTimers.get(container));
+  const timer = setInterval(() => {
+    // 다른 화면으로 이동해 이 영역이 더 이상 쓰이지 않으면 타이머를 멈춘다.
+    if (!container.isConnected || !container.querySelector('#creator-dashboard-current-time')) {
+      clearInterval(timer);
+      dashboardClockTimers.delete(container);
+      return;
+    }
+    paint();
+  }, 60 * 1000);
+  dashboardClockTimers.set(container, timer);
 }
 
 /**

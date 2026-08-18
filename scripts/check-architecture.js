@@ -16,12 +16,17 @@ const path = require('node:path');
 const projectRoot = path.join(__dirname, '..');
 
 const requiredPaths = [
-  'frontend/blog/index.html',
-  'frontend/creator/index.html',
+  'frontend/apps/blog/index.html',
+  'frontend/apps/creator/index.html',
   'frontend/shared/styles/app.css',
-  'frontend/shared/views/blog.js',
-  'frontend/shared/views/history.js',
-  'frontend/shared/views/settings.js',
+  'frontend/shared/styles/base.css',
+  'frontend/shared/lib/html.js',
+  'frontend/features/blog/index.js',
+  'frontend/features/history/index.js',
+  'frontend/features/settings/index.js',
+  'frontend/features/dashboard/index.js',
+  'frontend/features/instagram/index.js',
+  'frontend/features/youtube/index.js',
   'backend/apps/blog/index.js',
   'backend/apps/creator/index.js',
   'backend/core/pipeline.js',
@@ -32,6 +37,8 @@ const requiredPaths = [
   'docs/architecture.md',
 ];
 
+// 예전 구조에서 쓰던 경로들이다. 리팩터링 후 다시 생기면 두 벌의 코드가 공존하게 되므로
+// (실제로 frontend/creator 사본이 남아 혼선을 준 적이 있다) 남아 있으면 검사에서 실패시킨다.
 const removedLegacyPaths = [
   'core',
   'creator',
@@ -39,6 +46,9 @@ const removedLegacyPaths = [
   'publishers',
   'renderer',
   'pipeline.js',
+  'frontend/blog',
+  'frontend/creator',
+  'frontend/shared/views',
 ];
 
 function absolute(relativePath) {

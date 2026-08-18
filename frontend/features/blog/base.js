@@ -14,6 +14,7 @@
  * - 안전장치: 완전자동과 예약발행은 실제로 글이 올라가므로, 처음 선택할 때
  *   "정말 하시겠습니까?" 확인창을 띄웁니다.
  */
+import { escapeHtml } from '../../shared/lib/html.js';
 
 // 완전자동은 실제 글을 바로 발행하므로, 앱을 켠 뒤 처음 선택할 때만 확인창을 띄운다.
 // (매번 띄우면 번거로우므로 한 번만 확인하고 기억해 둔다)
@@ -53,18 +54,6 @@ function normalizeErrorMessage(value, fallback = '오류가 발생했습니다.'
     .trim();
 }
 
-function escapeHtml(str) {
-  // 제목·본문처럼 사용자가 입력한 문장을 HTML로 표시할 때 태그로 실행되지 않게 문자로 바꾼다.
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-function escapeAttr(str) {
-  return escapeHtml(str).replace(/"/g, '&quot;');
-}
-
 function formatPreviewInlineText(line) {
   // 미리보기에서는 **굵게** 표시와 URL만 HTML 서식으로 바꾸고, 나머지 글은 안전하게 그대로 보여 준다.
   const bolded = escapeHtml(line).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
@@ -81,7 +70,7 @@ function renderPreviewHtml(body, images) {
       const imageMatch = line.trim().match(/^\[IMAGE_(\d+)\]$/);
       if (imageMatch && imageMap.has(Number(imageMatch[1]))) {
         const image = imageMap.get(Number(imageMatch[1]));
-        return `<img src="${escapeAttr(image.fileUrl)}" alt="이미지 ${image.index}" class="preview-image" />`;
+        return `<img src="${escapeHtml(image.fileUrl)}" alt="이미지 ${image.index}" class="preview-image" />`;
       }
       if (line.startsWith('## ')) {
         return `<h3>${escapeHtml(line.slice(3))}</h3>`;
@@ -672,7 +661,7 @@ function renderPreview(container, content, mode) {
       ${renderQualitySummary(content.qualityReport)}
       <div class="field-row">
         <label>제목</label>
-        <input type="text" id="preview-title" value="${escapeAttr(content.title)}" />
+        <input type="text" id="preview-title" value="${escapeHtml(content.title)}" />
       </div>
       <div class="preview-grid">
         <div>

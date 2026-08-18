@@ -1,4 +1,14 @@
-/* 블로그 전용 앱의 공통 레이아웃, 입력, 미리보기와 설정 화면 스타일이다. */
+/**
+ * [기본 부품 디자인 - 두 앱 공통]
+ *
+ * 비개발자를 위한 설명:
+ * - 버튼, 입력칸, 선택 상자, 카드(설정 구역), 표처럼 화면 어디에나 나오는
+ *   '기본 부품'의 모양을 정해 둔 파일입니다.
+ * - 이 파일이 먼저 적용되고, 그 위에 app.css가 앱 전체 배치와 세부 디자인을 덮어씁니다.
+ *   그래서 두 파일을 불러오는 순서(base.css → app.css)를 바꾸면 안 됩니다.
+ * - 원래는 블로그 전용 앱 폴더 안에 있었지만 Creator도 똑같이 쓰고 있었기 때문에,
+ *   두 앱이 공유하는 shared/styles 폴더로 옮겼습니다.
+ */
 * {
   box-sizing: border-box;
 }
@@ -8,17 +18,6 @@ body {
   font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
   background: #f5f6f8;
   color: #1f2328;
-}
-
-.app-header {
-  background: #ffffff;
-  border-bottom: 1px solid #e2e4e8;
-  padding: 16px 24px 0;
-}
-
-.app-header h1 {
-  font-size: 18px;
-  margin: 0 0 12px;
 }
 
 .tabs {
@@ -40,12 +39,6 @@ body {
   color: #1a73e8;
   border-bottom-color: #1a73e8;
   font-weight: 600;
-}
-
-.app-main {
-  padding: 24px;
-  max-width: 900px;
-  margin: 0 auto;
 }
 
 .tab-panel {
@@ -594,14 +587,6 @@ button.history-platform-tab.active {
 }
 
 @media (max-width: 760px) {
-  .app-header {
-    padding: 14px 14px 0;
-  }
-
-  .app-main {
-    padding: 14px;
-  }
-
   .settings-section {
     padding: 16px;
     margin-bottom: 14px;

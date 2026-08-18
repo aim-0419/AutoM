@@ -443,9 +443,6 @@ module.exports = {
   generateContent,
   buildJobFolderName,
   buildSafeImagePrompt,
-  buildImageAttemptPrompt,
   appendInternalLinks,
-  selectInternalLinks,
-  renderMarkdownFile,
   writeMarkdownFile,
 };

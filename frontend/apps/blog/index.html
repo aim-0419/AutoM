@@ -3,42 +3,34 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AutoM Creator</title>
-    <link rel="stylesheet" href="../blog/styles.css" />
-    <link rel="stylesheet" href="../shared/styles/app.css" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' file: data:;"
+    />
+    <title>AutoM</title>
+    <link rel="stylesheet" href="../../shared/styles/base.css" />
+    <link rel="stylesheet" href="../../shared/styles/app.css" />
   </head>
-  <body class="creator-app">
+  <body class="creator-app autom-blog-app">
     <div class="app-shell creator-shell">
-      <aside class="creator-sidebar" aria-label="AutoM Creator 메뉴">
+      <aside class="creator-sidebar" aria-label="AutoM 메뉴">
         <div class="creator-brand">
           <div class="creator-brand-mark" aria-hidden="true">M</div>
           <div class="creator-brand-copy">
             <strong>AutoM</strong>
-            <span>AI 마케팅 자동화 플랫폼</span>
+            <span>AI 블로그 자동화</span>
           </div>
         </div>
 
         <nav class="tabs creator-nav" aria-label="주요 메뉴">
-          <button class="tab-button active" data-tab="dashboard" type="button" aria-current="page">
+          <button class="tab-button active" data-tab="main" type="button" aria-current="page">
             <span class="creator-nav-marker" aria-hidden="true"></span>
-            <span>대시보드</span>
+            <span>블로그</span>
           </button>
           <button class="creator-nav-disabled" type="button" disabled aria-label="키워드 리서치, 준비 중">
             <span class="creator-nav-marker creator-nav-marker-search" aria-hidden="true"></span>
             <span>키워드 리서치</span>
             <small>준비 중</small>
-          </button>
-          <button class="tab-button" data-tab="blog" type="button">
-            <span class="creator-nav-marker" aria-hidden="true"></span>
-            <span>블로그</span>
-          </button>
-          <button class="tab-button" data-tab="instagram" type="button">
-            <span class="creator-nav-marker" aria-hidden="true"></span>
-            <span>인스타그램</span>
-          </button>
-          <button class="tab-button" data-tab="youtube" type="button">
-            <span class="creator-nav-marker" aria-hidden="true"></span>
-            <span>유튜브</span>
           </button>
           <button class="tab-button" data-tab="history" type="button">
             <span class="creator-nav-marker" aria-hidden="true"></span>
@@ -62,48 +54,44 @@
 
         <div class="creator-sidebar-quick" aria-label="빠른 실행">
           <span>QUICK</span>
-          <button type="button" data-target-tab="blog">새 콘텐츠 만들기</button>
+          <button type="button" data-target-tab="main">새 콘텐츠 만들기</button>
           <button type="button" disabled aria-label="키워드 리서치, 준비 중">키워드 리서치</button>
         </div>
 
         <div class="creator-sidebar-status">
           <span class="creator-sidebar-avatar" aria-hidden="true">A</span>
           <div>
-            <strong id="creator-sidebar-user-name">AutoM 사용자</strong>
-            <span id="creator-sidebar-user-status">로컬 작업 환경</span>
+            <strong>AutoM 사용자</strong>
+            <span>블로그 전용</span>
           </div>
         </div>
       </aside>
 
       <div class="creator-main">
         <header class="creator-page-header">
-          <nav class="creator-top-tabs" aria-label="콘텐츠 화면 이동">
-            <button type="button" data-target-tab="blog">블로그</button>
-            <button type="button" data-target-tab="instagram">인스타그램</button>
-            <button type="button" data-target-tab="youtube">유튜브</button>
+          <nav class="creator-top-tabs" aria-label="블로그 화면 이동">
+            <button type="button" data-target-tab="main">블로그</button>
             <button type="button" data-target-tab="history">발행 기록</button>
             <button type="button" data-target-tab="settings">설정</button>
           </nav>
           <div class="creator-page-heading">
             <span id="creator-page-context" class="creator-page-context">콘텐츠 생성</span>
-            <h1 id="creator-page-title">블로그</h1>
-            <p id="creator-page-description">네이버 블로그 콘텐츠</p>
+            <h1 id="creator-page-title">블로그 콘텐츠 만들기</h1>
+            <p id="creator-page-description">키워드와 발행 방식을 선택해 네이버 블로그 콘텐츠를 준비합니다.</p>
           </div>
-          <span class="creator-status-badge">AutoM Creator</span>
+          <span class="creator-status-badge">AutoM</span>
         </header>
 
         <main class="app-content creator-page">
           <div class="creator-page-inner">
-            <section id="tab-dashboard" class="tab-panel active"></section>
-            <section id="tab-blog" class="tab-panel"></section>
-            <section id="tab-instagram" class="tab-panel"></section>
-            <section id="tab-youtube" class="tab-panel"></section>
+            <section id="tab-main" class="tab-panel active"></section>
             <section id="tab-history" class="tab-panel"></section>
             <section id="tab-settings" class="tab-panel"></section>
           </div>
         </main>
       </div>
     </div>
+
     <script type="module" src="./renderer.js"></script>
   </body>
 </html>

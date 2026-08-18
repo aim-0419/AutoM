@@ -42,7 +42,10 @@
       "backend/shared/**/*",
       "backend/core/**/*",
       "backend/features/blog/**/*",
-      "frontend/blog/**/*",
+      "frontend/apps/blog/**/*",
+      "frontend/features/blog/**/*",
+      "frontend/features/history/**/*",
+      "frontend/features/settings/**/*",
       "frontend/shared/**/*",
       "package.json"
     ],

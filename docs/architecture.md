@@ -4,12 +4,22 @@
 
 AutoM은 화면을 담당하는 `frontend`와 Electron 메인 프로세스 및 기능을 담당하는 `backend`를 분리합니다. 화면은 `window.api`로 공개된 기능만 호출하며 파일 시스템, 로그인 세션, API 키 저장소에 직접 접근하지 않습니다.
 
+프론트엔드와 백엔드는 **같은 3단 구조**(`apps` / `features` / `shared`)를 사용합니다. 어느 쪽을 보든 "앱 껍데기 → 기능 → 공통 도구" 순서로 찾으면 됩니다.
+
 ```text
 AutoM/
 ├─ frontend/
-│  ├─ blog/                 # 블로그 전용 화면
-│  ├─ creator/              # Creator 대시보드와 플랫폼별 화면
-│  └─ shared/               # 두 앱이 함께 쓰는 디자인, 로고와 View 장식
+│  ├─ apps/
+│  │  ├─ blog/              # AutoM(블로그 전용) 창의 HTML과 화면 전환
+│  │  └─ creator/           # AutoM Creator 창의 HTML과 화면 전환
+│  ├─ features/             # 화면 한 개 = 폴더 한 개
+│  │  ├─ blog/              # base.js(기능) + index.js(디자인·안내 덧붙이기)
+│  │  ├─ history/           # base.js + index.js
+│  │  ├─ settings/          # base.js + index.js
+│  │  ├─ dashboard/         # Creator 전용
+│  │  ├─ instagram/         # Creator 전용
+│  │  └─ youtube/           # Creator 전용
+│  └─ shared/               # 공통 디자인(styles), 로고(assets), 공통 도구(lib)
 ├─ backend/
 │  ├─ apps/
 │  │  ├─ blog/              # 블로그 앱 진입점과 preload
@@ -30,11 +40,26 @@ AutoM/
 
 프론트엔드는 별도 프레임워크 없이 HTML, CSS, JavaScript ES Module로 구성되어 있습니다.
 
-- `frontend/blog`: 블로그 입력, 미리보기, 발행 기록, 설정 화면
-- `frontend/creator`: 대시보드, 블로그, 인스타그램, YouTube, 통합 기록, 설정 화면
-- `frontend/shared`: 두 앱의 앱 셸, 디자인 토큰, 플랫폼 로고와 블로그·기록·설정 View 장식
+- `frontend/apps/<앱>`: 창의 HTML과 "메뉴를 누르면 어떤 화면을 보여줄지"만 담당합니다. 화면 내용은 갖고 있지 않습니다.
+- `frontend/features/<기능>`: 화면 하나가 폴더 하나입니다. 두 앱이 함께 쓰는 blog·history·settings는 다음 두 파일로 나뉩니다.
+  - `base.js`: 실제 기능(입력칸, 버튼, 저장·발행 요청)
+  - `index.js`: 그 위에 안내 문구와 디자인을 덧붙이고 앱별 차이(`platformTabs`, `includeInstagram`)를 처리
+- `frontend/shared`: 디자인 파일(`styles/base.css` → `styles/app.css` 순서로 적용), 플랫폼 로고, 공통 도구(`lib/html.js`).
 - AutoM과 Creator는 같은 공통 디자인 파일을 사용하며, 각 앱은 실제 제공 기능에 맞는 메뉴와 설정만 노출합니다.
 - 기존 element ID, `data-tab`, input name/value는 이벤트 계약이므로 변경할 때 테스트가 필요합니다.
+
+### 디자인 파일을 고칠 때
+
+`frontend/shared/styles/app.css`는 규칙이 여러 겹으로 덮어쓰는 구조라 **순서를 바꾸면 겉모습이 달라집니다.**
+화면별로 파일을 쪼개려 시도했을 때 34개 화면에서 1,606곳의 모양 차이가 발생해 되돌린 이력이 있습니다.
+순서에 영향을 주는 수정을 한다면 아래 도구로 전후를 비교하세요.
+
+```bash
+node scripts/capture-style-snapshot.js before
+# (수정)
+node scripts/capture-style-snapshot.js after
+node scripts/capture-style-snapshot.js compare
+```
 
 ## 백엔드
 
@@ -60,10 +85,13 @@ AutoM/
 ## 의존 방향
 
 ```text
-frontend -> preload(window.api) -> IPC -> features/core/shared
-apps -> shared + features
-features -> core + shared
-shared -> core + blog feature
+frontend/apps      -> frontend/features -> frontend/shared
+frontend           -> preload(window.api) -> IPC -> backend
+backend/apps       -> backend/features + backend/shared
+backend/features   -> backend/core + backend/shared
 ```
+
+의존은 **한 방향으로만** 흐릅니다. `shared`는 어떤 기능도 참조하지 않고, 기능끼리도 서로 참조하지 않습니다.
+(예전에는 `frontend/shared`가 `frontend/blog`를 거꾸로 참조하고 있었는데, 기능별 폴더로 정리하면서 없앴습니다.)
 
 구조를 바꾼 뒤에는 `npm run check:architecture`를 실행해 필수 경로, 진입점, 상대 import를 확인합니다.

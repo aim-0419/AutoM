@@ -10,15 +10,7 @@
  *        저장된 폴더에서 파일을 꺼내 직접 올린다
  * - 실제 제작과 업로드는 프로그램 내부(백엔드)가 하고, 이 화면은 요청과 결과 표시만 담당합니다.
  */
-function escapeHtml(value) {
-  // 사용자·AI가 만든 문구가 HTML 명령으로 잘못 해석되지 않도록 안전한 문자로 바꾼다.
-  return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+import { escapeHtml } from '../../shared/lib/html.js';
 
 // 카드 '생성' 진행 단계를 사용자가 읽을 수 있는 문구로 바꾸는 표
 const STAGE_LABELS = {
@@ -27,6 +19,20 @@ const STAGE_LABELS = {
   rendering: '카드 PNG 합성 중...',
   done: '카드 묶음 생성 완료',
 };
+
+// 결과가 아직 없을 때(또는 생성에 실패했을 때) 결과 자리에 보여 줄 안내 화면.
+// 생성 시작과 동시에 결과 영역을 비우기 때문에, 실패하면 이 안내를 다시 넣어 준다.
+// (그러지 않으면 실패했을 때 결과 영역이 텅 빈 채로 남아 무엇을 해야 할지 알 수 없다)
+const EMPTY_OUTPUT_HTML = `
+  <section class="settings-section creator-instagram-empty" aria-labelledby="instagram-empty-title">
+    <span class="creator-instagram-empty-mark" aria-hidden="true"></span>
+    <h2 id="instagram-empty-title">카드 미리보기</h2>
+    <p>카드를 생성하면 이미지와 캡션이 여기에 표시됩니다.</p>
+  </section>
+`;
+
+// 화면마다 등록한 '진행 상황 알림' 구독을 기억해 두었다가, 화면을 다시 그릴 때 해제하는 데 쓴다.
+const progressSubscriptions = new WeakMap();
 
 // 인스타그램 '발행(업로드)' 진행 단계 문구
 const PUBLISH_STAGE_LABELS = {
@@ -136,6 +142,9 @@ export function renderOutput(container, content) {
       });
       publishResultEl.textContent = result.message;
       publishResultEl.className = `test-result ${result.success ? 'success' : 'error'}`;
+      // 발행을 여러 번 시도하면 '게시물 열기' 버튼이 계속 늘어나므로,
+      // 이전에 만든 버튼이 있으면 지우고 항상 한 개만 남긴다.
+      area.querySelector('.instagram-open-post')?.remove();
       if (result.url) {
         const link = document.createElement('button');
         link.type = 'button';
@@ -270,13 +279,7 @@ export async function initInstagramView(container) {
         </div>
       </section>
 
-      <div id="instagram-output" class="creator-instagram-output">
-        <section class="settings-section creator-instagram-empty" aria-labelledby="instagram-empty-title">
-          <span class="creator-instagram-empty-mark" aria-hidden="true"></span>
-          <h2 id="instagram-empty-title">카드 미리보기</h2>
-          <p>카드를 생성하면 이미지와 캡션이 여기에 표시됩니다.</p>
-        </section>
-      </div>
+      <div id="instagram-output" class="creator-instagram-output">${EMPTY_OUTPUT_HTML}</div>
     </div>
   `;
 
@@ -349,18 +352,24 @@ export async function initInstagramView(container) {
       recommendButton.disabled = false;
     }
   });
-  const removeProgressListener = window.api.onInstagramProgress((progress) => {
-    const label = STAGE_LABELS[progress.stage] || progress.stage;
-    const counter = progress.total ? ` (${progress.current}/${progress.total})` : '';
-    progressEl.textContent = `${label}${counter}`;
-    progressEl.className = `instagram-progress test-result ${progress.stage === 'done' ? 'success' : ''}`;
-  });
-  window.api.onInstagramPublishProgress((progress) => {
-    const publishProgressEl = container.querySelector('#instagram-publish-progress');
-    if (!publishProgressEl) return;
-    publishProgressEl.textContent = PUBLISH_STAGE_LABELS[progress.stage] || progress.stage;
-    publishProgressEl.className = `instagram-progress test-result ${progress.stage === 'published' ? 'success' : ''}`;
-  });
+  // 이 화면을 다시 그리게 되면 이전에 등록해 둔 '진행 상황 알림' 구독을 먼저 끊는다.
+  // 끊지 않으면 같은 알림을 두 번 세 번 받아, 진행 문구가 엉뚱하게 덮어써진다.
+  progressSubscriptions.get(container)?.();
+  const unsubscribeCallbacks = [
+    window.api.onInstagramProgress((progress) => {
+      const label = STAGE_LABELS[progress.stage] || progress.stage;
+      const counter = progress.total ? ` (${progress.current}/${progress.total})` : '';
+      progressEl.textContent = `${label}${counter}`;
+      progressEl.className = `instagram-progress test-result ${progress.stage === 'done' ? 'success' : ''}`;
+    }),
+    window.api.onInstagramPublishProgress((progress) => {
+      const publishProgressEl = container.querySelector('#instagram-publish-progress');
+      if (!publishProgressEl) return;
+      publishProgressEl.textContent = PUBLISH_STAGE_LABELS[progress.stage] || progress.stage;
+      publishProgressEl.className = `instagram-progress test-result ${progress.stage === 'published' ? 'success' : ''}`;
+    }),
+  ];
+  progressSubscriptions.set(container, () => unsubscribeCallbacks.forEach((unsubscribe) => unsubscribe?.()));
 
   button.addEventListener('click', async () => {
     const keyword = container.querySelector('#instagram-keyword').value.trim();
@@ -375,7 +384,8 @@ export async function initInstagramView(container) {
     resultEl.textContent = '생성 요청 중...';
     resultEl.className = 'test-result';
     progressEl.textContent = '';
-    container.querySelector('#instagram-output').innerHTML = '';
+    const outputArea = container.querySelector('#instagram-output');
+    outputArea.innerHTML = EMPTY_OUTPUT_HTML;
     try {
       const result = await window.api.generateInstagramCarousel({ keyword, cardCount });
       if (!result.success) {
@@ -393,6 +403,4 @@ export async function initInstagramView(container) {
       button.disabled = false;
     }
   });
-
-  void removeProgressListener;
 }

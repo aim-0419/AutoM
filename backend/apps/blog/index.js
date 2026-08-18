@@ -51,7 +51,7 @@ function createMainWindow() {
 
   // Electron이 기본으로 보여주는 File/Edit/View/Window 메뉴는 사용자 기능과 무관하므로 숨긴다.
   mainWindow.setMenu(null);
-  mainWindow.loadFile(path.join(__dirname, '..', '..', '..', 'frontend', 'blog', 'index.html'));
+  mainWindow.loadFile(path.join(__dirname, '..', '..', '..', 'frontend', 'apps', 'blog', 'index.html'));
 
   mainWindow.on('closed', () => {
     mainWindow = null;

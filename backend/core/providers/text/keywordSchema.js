@@ -115,6 +115,5 @@ module.exports = {
   RETRY_REMINDER,
   buildSystemPrompt,
   buildUserPrompt,
-  parseKeywordSuggestions,
   generateKeywordSuggestionsWithRetry,
 };

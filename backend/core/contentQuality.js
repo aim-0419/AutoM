@@ -467,11 +467,7 @@ function formatBlockingQualityMessage(report) {
 module.exports = {
   auditContent,
   buildHistoryQualityFields,
-  calculateSignatureSimilarity,
-  createContentFingerprint,
-  createContentSignature,
   formatBlockingQualityMessage,
   isNaverBlogUrl,
-  stripGeneratedAppendices,
   toPublicQualityReport,
 };

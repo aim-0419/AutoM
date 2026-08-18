@@ -20,3 +20,6 @@ output/*
 # OS
 Thumbs.db
 .DS_Store
+
+# 문서 배포용으로 만든 압축 파일 (docs/notion-manual 내용을 묶은 결과물)
+docs/*.zip

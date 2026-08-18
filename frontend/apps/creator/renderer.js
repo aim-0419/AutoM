@@ -5,15 +5,15 @@
  * - 왼쪽 메뉴 6개(대시보드 / 블로그 / 인스타그램 / 유튜브 / 기록 / 설정)와
  *   각 화면을 연결합니다. 메뉴를 누르면 창 안의 내용만 바뀝니다.
  * - 블로그 화면은 블로그 전용 앱(AutoM)과 완전히 같은 코드를 공유합니다.
- *   두 앱에서 동작이 달라지는 일이 없도록 한 곳(shared/views/blog.js)에서 관리합니다.
+ *   두 앱에서 동작이 달라지는 일이 없도록 한 곳(features/blog/)에서 관리합니다.
  * - 대시보드와 기록 화면은 열 때마다 최신 정보로 다시 그립니다(reloadOnActivate).
  */
-import { initDashboardView } from './views/dashboard.js';
-import { initCreatorHistoryView } from './views/history.js';
-import { initInstagramView } from './views/instagram.js';
-import { initYoutubeView } from './views/youtube.js';
-import { initCreatorSettingsView } from './views/settings.js';
-import { initStyledBlogView } from '../shared/views/blog.js';
+import { initDashboardView } from '../../features/dashboard/index.js';
+import { initStyledHistoryView } from '../../features/history/index.js';
+import { initInstagramView } from '../../features/instagram/index.js';
+import { initYoutubeView } from '../../features/youtube/index.js';
+import { initStyledSettingsView } from '../../features/settings/index.js';
+import { initStyledBlogView } from '../../features/blog/index.js';
 
 // 화면마다 위쪽에 표시할 분류·제목·설명 문구
 const pageMeta = {
@@ -65,8 +65,19 @@ const tabs = {
   blog: { panel: document.getElementById('tab-blog'), init: initStyledBlogView, loaded: false },
   instagram: { panel: document.getElementById('tab-instagram'), init: initInstagramView, loaded: false },
   youtube: { panel: document.getElementById('tab-youtube'), init: initYoutubeView, loaded: false },
-  history: { panel: document.getElementById('tab-history'), init: initCreatorHistoryView, loaded: false, reloadOnActivate: true },
-  settings: { panel: document.getElementById('tab-settings'), init: initCreatorSettingsView, loaded: false },
+  history: {
+    panel: document.getElementById('tab-history'),
+    // Creator는 블로그·인스타그램·유튜브 기록을 플랫폼 탭으로 나눠 보여준다(platformTabs: true).
+    init: (panel) => initStyledHistoryView(panel, { platformTabs: true }),
+    loaded: false,
+    reloadOnActivate: true,
+  },
+  settings: {
+    panel: document.getElementById('tab-settings'),
+    // Creator에는 인스타그램 기능이 있으므로 설정에도 인스타그램 계정 항목을 함께 보여준다.
+    init: (panel) => initStyledSettingsView(panel, { includeInstagram: true }),
+    loaded: false,
+  },
 };
 
 /**

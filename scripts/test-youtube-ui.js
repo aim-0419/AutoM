@@ -105,7 +105,7 @@ async function main() {
 
     await page.evaluate(
       async ({ frameUrl, videoUrl, workDir, scenes }) => {
-        const module = await import('./views/youtube.js');
+        const module = await import('../../features/youtube/index.js');
         module.renderYoutubeOutput(document.querySelector('#tab-youtube'), {
           title: '아침 피로를 줄이기 위해 먼저 확인할 생활 습관',
           format: 'shorts',

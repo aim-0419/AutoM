@@ -3,7 +3,7 @@
  *
  * 비개발자를 위한 설명:
  * - 설정 화면의 실제 내용(입력칸, 저장 버튼, 연결 테스트)을 만드는 파일입니다.
- *   보기 좋게 꾸미는 일은 shared/views/settings.js가 따로 담당합니다.
+ *   보기 좋게 꾸미는 일은 같은 폴더의 index.js가 따로 담당합니다.
  *
  * - 여기서 관리하는 설정:
  *     · 글쓰기 AI / 이미지 AI 선택과 API 키, 모델명
@@ -16,17 +16,7 @@
  * 마우스 클릭을 받지 못하는 문제가 실제로 확인되었습니다. 그래서 겉모습만 드롭다운처럼
  * 보이는 요소를 직접 만들어 씁니다. 마우스뿐 아니라 방향키·엔터·ESC로도 조작됩니다.
  */
-function escapeHtml(value) {
-  // 설정값을 화면 HTML 안에 넣을 때 태그처럼 실행되지 않도록 문자로 바꾼다.
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-function escapeAttr(value) {
-  return escapeHtml(value).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
+import { escapeHtml } from '../../shared/lib/html.js';
 
 function customSelectHtml(className, options, selectedValue, extraAttrs = '') {
   // 브라우저 기본 선택 상자 대신 사용할 드롭다운의 HTML을 만든다.
@@ -34,11 +24,11 @@ function customSelectHtml(className, options, selectedValue, extraAttrs = '') {
   const selectedOption = options.find((o) => o.value === selectedValue) || options[0];
   const items = options
     .map(
-      (o) => `<div class="custom-select-item${o.value === selectedValue ? ' selected' : ''}" data-value="${escapeAttr(o.value)}" role="option" aria-selected="${o.value === selectedValue}" tabindex="-1">${escapeHtml(o.label)}</div>`
+      (o) => `<div class="custom-select-item${o.value === selectedValue ? ' selected' : ''}" data-value="${escapeHtml(o.value)}" role="option" aria-selected="${o.value === selectedValue}" tabindex="-1">${escapeHtml(o.label)}</div>`
     )
     .join('');
   return `
-    <div class="custom-select ${escapeAttr(className)}" data-value="${escapeAttr(selectedOption.value)}" tabindex="0" role="combobox" aria-haspopup="listbox" aria-expanded="false" ${extraAttrs}>
+    <div class="custom-select ${escapeHtml(className)}" data-value="${escapeHtml(selectedOption.value)}" tabindex="0" role="combobox" aria-haspopup="listbox" aria-expanded="false" ${extraAttrs}>
       <div class="custom-select-trigger">${escapeHtml(selectedOption.label)}</div>
       <div class="custom-select-menu" role="listbox" hidden>${items}</div>
     </div>
@@ -150,17 +140,17 @@ function providerCardHtml(kind, provider, savedModel, apiKeyInfo) {
     ? `저장된 키: ${apiKeyInfo.masked}`
     : '저장된 키 없음';
   return `
-    <div class="provider-card" data-kind="${escapeAttr(kind)}" data-provider="${escapeAttr(provider.id)}">
+    <div class="provider-card" data-kind="${escapeHtml(kind)}" data-provider="${escapeHtml(provider.id)}">
       <h3>${escapeHtml(provider.label)}</h3>
       <div class="field-row">
         <label>API 키</label>
         <input type="password" class="input-api-key" placeholder="새 키를 입력하면 교체됩니다" autocomplete="off" />
-        <button type="button" class="btn-open-api-key-page secondary" title="${escapeAttr(provider.label)} API 키 발급 페이지를 기본 브라우저로 엽니다">키 발급 페이지</button>
+        <button type="button" class="btn-open-api-key-page secondary" title="${escapeHtml(provider.label)} API 키 발급 페이지를 기본 브라우저로 엽니다">키 발급 페이지</button>
       </div>
       <div class="hint api-key-note">${escapeHtml(hasKeyNote)}</div>
       <div class="field-row">
         <label>모델명</label>
-        <input type="text" class="input-model" value="${escapeAttr(savedModel || provider.defaultModel)}" />
+        <input type="text" class="input-model" value="${escapeHtml(savedModel || provider.defaultModel)}" />
       </div>
       <div class="field-row">
         <label></label>
@@ -308,7 +298,7 @@ export async function initSettingsView(container) {
       <h2>네이버</h2>
       <div class="field-row">
         <label>블로그 ID</label>
-        <input type="text" id="input-naver-blog-id" value="${escapeAttr(state.settings.naver.blogId)}" />
+        <input type="text" id="input-naver-blog-id" value="${escapeHtml(state.settings.naver.blogId)}" />
       </div>
       <div class="field-row">
         <label>로그인 상태</label>
@@ -326,7 +316,7 @@ export async function initSettingsView(container) {
       <h2>발행 기본값</h2>
       <div class="field-row">
         <label>카테고리명</label>
-        <input type="text" id="input-category" value="${escapeAttr(state.settings.publishDefaults.category)}" />
+        <input type="text" id="input-category" value="${escapeHtml(state.settings.publishDefaults.category)}" />
       </div>
       <div class="field-row">
         <label>공개 설정</label>
@@ -359,7 +349,7 @@ export async function initSettingsView(container) {
       <h2>출력 폴더</h2>
       <div class="field-row">
         <label>반자동 저장 위치</label>
-        <input type="text" id="input-output-folder" value="${escapeAttr(state.settings.outputFolder)}" readonly />
+        <input type="text" id="input-output-folder" value="${escapeHtml(state.settings.outputFolder)}" readonly />
         <button type="button" id="btn-choose-folder" class="secondary">폴더 선택</button>
       </div>
     </div>

@@ -2,7 +2,7 @@
  * [발행 기록 화면 '꾸미기' 담당 - 두 앱 공통]
  *
  * 비개발자를 위한 설명:
- * - 기록 목록을 실제로 불러오는 일은 blog/views/history.js가 합니다.
+ * - 기록 목록을 실제로 불러오는 일은 같은 폴더의 base.js가 합니다.
  *   이 파일은 그 위에 보기 편한 요소를 덧붙입니다.
  *     · "현재 보기: 블로그 · 12건" 같은 요약 표시
  *     · 성공/실패/예약을 색깔로 구분하는 상태 배지
@@ -11,7 +11,7 @@
  * - Creator 앱은 블로그·인스타그램·유튜브 탭을 함께 보여주고(platformTabs: true),
  *   블로그 전용 앱은 탭 없이 블로그 기록만 보여줍니다(platformTabs: false).
  */
-import { initHistoryView } from '../../blog/views/history.js';
+import { initHistoryView } from './base.js';
 
 // 플랫폼별 표시 이름과, 기록이 하나도 없을 때 보여줄 안내 문구
 const HISTORY_PLATFORMS = {

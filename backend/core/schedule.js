@@ -89,11 +89,8 @@ function toLocalScheduleParts(value) {
 }
 
 module.exports = {
-  MAX_SCHEDULE_DAYS,
-  MIN_SCHEDULE_LEAD_MINUTES,
   SCHEDULE_MINUTE_STEP,
   buildBatchScheduleAt,
   normalizeScheduleAt,
-  roundUpToScheduleStep,
   toLocalScheduleParts,
 };

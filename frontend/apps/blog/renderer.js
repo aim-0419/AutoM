@@ -8,9 +8,9 @@
  * - 각 화면은 처음 열 때 한 번만 만들어 두고 재사용합니다. 다만 '발행 기록'처럼
  *   내용이 계속 바뀌는 화면은 열 때마다 새로 불러옵니다(reloadOnActivate).
  */
-import { initStyledBlogView } from '../shared/views/blog.js';
-import { initStyledHistoryView } from '../shared/views/history.js';
-import { initStyledSettingsView } from '../shared/views/settings.js';
+import { initStyledBlogView } from '../../features/blog/index.js';
+import { initStyledHistoryView } from '../../features/history/index.js';
+import { initStyledSettingsView } from '../../features/settings/index.js';
 
 // 화면 이름과 안내 문구를 한곳에서 관리해 사이드바와 상단 탭이 같은 정보를 보여 주게 한다.
 // (화면 위쪽에 표시되는 제목·설명이 여기서 나온다)

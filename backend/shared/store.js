@@ -153,9 +153,7 @@ function getSettingsForRenderer() {
 }
 
 module.exports = {
-  getDefaultSettings,
   loadSettings,
   saveSettings,
   getSettingsForRenderer,
-  maskKey,
 };

@@ -13,14 +13,7 @@
  * - 이 프로그램은 유튜브에 자동 업로드하지 않습니다.
  *   본인의 목소리와 해설을 더해 올리는 것을 전제로, '재료'까지만 만들어 줍니다.
  */
-function escapeHtml(value) {
-  return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+import { escapeHtml } from '../../shared/lib/html.js';
 
 /**
  * 영상 형식별로 고를 수 있는 길이와 장면 수 목록이다.
@@ -50,6 +43,20 @@ const FORMAT_OPTIONS = {
     defaults: { 180: 8, 300: 10, 480: 12 },
   },
 };
+
+// 결과가 아직 없을 때(또는 생성에 실패했을 때) 결과 자리에 보여 줄 안내 화면.
+// 생성 시작과 동시에 결과 영역을 비우기 때문에, 실패하면 이 안내를 다시 넣어 준다.
+// (그러지 않으면 실패했을 때 결과 영역이 텅 빈 채로 남아 무엇을 해야 할지 알 수 없다)
+const EMPTY_OUTPUT_HTML = `
+  <section class="settings-section creator-youtube-empty" aria-labelledby="youtube-empty-title">
+    <span class="creator-youtube-empty-mark" aria-hidden="true"></span>
+    <h2 id="youtube-empty-title">아직 생성된 유튜브 콘텐츠가 없습니다</h2>
+    <p>채널 기준과 영상 설정을 입력한 후 콘텐츠 생성을 시작하세요.</p>
+  </section>
+`;
+
+// 화면마다 등록한 '진행 상황 알림' 구독을 기억해 두었다가, 화면을 다시 그릴 때 해제하는 데 쓴다.
+const progressSubscriptions = new WeakMap();
 
 // 진행 단계를 사용자가 읽을 수 있는 문구로 바꾸는 표
 const STAGE_LABELS = {
@@ -406,13 +413,7 @@ export async function initYoutubeView(container) {
         </section>
       </div>
 
-      <div id="youtube-output" class="creator-youtube-output">
-        <section class="settings-section creator-youtube-empty" aria-labelledby="youtube-empty-title">
-          <span class="creator-youtube-empty-mark" aria-hidden="true"></span>
-          <h2 id="youtube-empty-title">아직 생성된 유튜브 콘텐츠가 없습니다</h2>
-          <p>채널 기준과 영상 설정을 입력한 후 콘텐츠 생성을 시작하세요.</p>
-        </section>
-      </div>
+      <div id="youtube-output" class="creator-youtube-output">${EMPTY_OUTPUT_HTML}</div>
     </div>
   `;
 
@@ -482,12 +483,18 @@ export async function initYoutubeView(container) {
     }
   });
 
-  const removeProgressListener = window.api.onYoutubeProgress((progress) => {
-    const label = STAGE_LABELS[progress.stage] || progress.stage;
-    const counter = progress.total ? ` (${progress.current}/${progress.total})` : '';
-    progressEl.textContent = `${label}${counter}`;
-    progressEl.className = `youtube-progress test-result ${progress.stage === 'done' ? 'success' : ''}`;
-  });
+  // 이 화면을 다시 그리게 되면 이전에 등록해 둔 '진행 상황 알림' 구독을 먼저 끊는다.
+  // 끊지 않으면 같은 알림을 두 번 세 번 받아, 진행 문구가 엉뚱하게 덮어써진다.
+  progressSubscriptions.get(container)?.();
+  progressSubscriptions.set(
+    container,
+    window.api.onYoutubeProgress((progress) => {
+      const label = STAGE_LABELS[progress.stage] || progress.stage;
+      const counter = progress.total ? ` (${progress.current}/${progress.total})` : '';
+      progressEl.textContent = `${label}${counter}`;
+      progressEl.className = `youtube-progress test-result ${progress.stage === 'done' ? 'success' : ''}`;
+    })
+  );
 
   generateButton.addEventListener('click', async () => {
     const keyword = container.querySelector('#youtube-keyword').value.trim();
@@ -509,7 +516,7 @@ export async function initYoutubeView(container) {
     resultEl.textContent = '생성 요청 중...';
     resultEl.className = 'test-result';
     progressEl.textContent = '';
-    container.querySelector('#youtube-output').innerHTML = '';
+    container.querySelector('#youtube-output').innerHTML = EMPTY_OUTPUT_HTML;
     try {
       const result = await window.api.generateYoutubeProject({
         keyword,
@@ -536,6 +543,4 @@ export async function initYoutubeView(container) {
       generateButton.disabled = false;
     }
   });
-
-  void removeProgressListener;
 }

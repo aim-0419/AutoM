@@ -1,4 +1,30 @@
-/* AutoM과 Creator가 함께 사용하는 디자인 토큰과 반응형 레이아웃이다. */
+/**
+ * [AutoM · AutoM Creator 공통 화면 디자인]
+ *
+ * 비개발자를 위한 설명:
+ * - 이 파일은 프로그램의 '겉모습'을 담당합니다. 글자 크기, 색, 여백, 카드 모양,
+ *   창을 줄였을 때의 배치까지 전부 여기서 정해집니다. 기능(동작)과는 무관합니다.
+ * - 맨 앞의 :root 부분은 '디자인 기본값 모음'입니다. 색과 여백에 이름을 붙여 두고
+ *   나머지가 그 이름을 가져다 씁니다. 전체 색감을 바꾸고 싶다면 여기만 고치면 됩니다.
+ *
+ * ── 파일 안의 순서 (찾을 때 참고하세요) ─────────────────────────
+ *   1. 디자인 기본값(:root)과 앱 전체 뼈대 — 사이드바, 상단 제목, 화면 전환 영역
+ *   2. 대시보드·블로그·인스타그램·유튜브·기록·설정 화면의 기본 디자인
+ *   3. Creator 전용 정보 구조 보정
+ *   4. 화면별 세부 보정 (Dashboard / Blog / Instagram / YouTube / History / Settings)
+ *   5. 마지막 보정 — 공통 버튼 충돌, 카드 밀도, 좁은 창에서의 열 배치
+ *
+ * ⚠ 수정할 때 꼭 알아야 할 점:
+ * 이 파일은 위 1~5가 '겹겹이 덮어쓰는' 구조입니다. 즉 같은 항목을 아래쪽에서 다시
+ * 정하면 아래쪽이 이깁니다. 그래서 규칙의 순서를 바꾸거나 화면별로 파일을 쪼개면
+ * 겉모습이 달라집니다. (실제로 기능별 파일 분리를 시도했을 때 34개 화면에서
+ * 1,606곳의 모양 차이가 발생해 되돌렸습니다.)
+ * 순서를 바꾸는 작업을 하려면 반드시 아래 도구로 전후를 비교해 확인하세요.
+ *     node scripts/capture-style-snapshot.js before
+ *     (수정)
+ *     node scripts/capture-style-snapshot.js after
+ *     node scripts/capture-style-snapshot.js compare
+ */
 .creator-app {
   --color-bg: #f7f9fc;
   --color-surface: #ffffff;
@@ -118,14 +144,6 @@
   display: grid;
   gap: var(--space-1);
   margin-top: var(--space-6);
-}
-
-.creator-app .creator-nav-section-label {
-  margin: var(--space-4) var(--space-3) var(--space-1);
-  color: var(--color-text-muted);
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
 }
 
 .creator-app .creator-nav .tab-button {
@@ -271,16 +289,6 @@
   color: #ffffff;
   font-size: 14px;
   font-weight: 800;
-}
-
-.creator-app .creator-status-dot {
-  width: 9px;
-  height: 9px;
-  flex: 0 0 9px;
-  margin-top: 4px;
-  border-radius: 50%;
-  background: var(--color-success);
-  box-shadow: 0 0 0 3px var(--color-success-soft);
 }
 
 .creator-app .creator-sidebar-status div {
@@ -554,12 +562,6 @@
   word-break: keep-all;
 }
 
-.creator-app .creator-dashboard-intro .creator-dashboard-local-note {
-  color: var(--color-text-primary);
-  font-size: 13px;
-  font-weight: 600;
-}
-
 .creator-app .creator-dashboard-refresh {
   display: grid;
   min-width: 188px;
@@ -596,12 +598,6 @@
   color: var(--color-error);
   font-size: 14px;
   line-height: 1.6;
-}
-
-.creator-app .creator-dashboard-section {
-  display: grid;
-  min-width: 0;
-  gap: var(--space-4);
 }
 
 .creator-app .creator-dashboard-section-heading {
@@ -2315,8 +2311,16 @@
 
 .creator-app .instagram-card-copy strong,
 .creator-app .instagram-card-copy span {
+  /*
+   * 띄어쓰기 없이 아주 긴 문장이 들어와도 카드 밖으로 삐져나오지 않게 한다.
+   * - min-width: 0   : 이 요소들은 격자(grid) 칸 안에 있는데, 기본값은 "내용보다 작아지지 않기"라서
+   *                    긴 글자가 그대로 카드를 밀고 나간다. 그래서 줄어들 수 있도록 풀어 준다.
+   * - overflow-wrap  : anywhere는 필요하면 글자 중간에서도 줄을 바꾼다.
+   *                    (break-word와 달리 칸 너비를 계산할 때도 반영되어 실제로 넘침을 막아 준다)
+   */
+  min-width: 0;
   word-break: keep-all;
-  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
 }
 
 .creator-app .instagram-open-post {
@@ -3055,11 +3059,19 @@
   padding: var(--space-3);
 }
 
+/*
+ * 장면 제목·자막·설명이 띄어쓰기 없이 길어도 장면 카드 밖으로 나가지 않게 한다.
+ * 이유는 인스타그램 카드(.instagram-card-copy)와 같다:
+ * 격자 칸 안의 요소는 기본적으로 "내용보다 작아지지 않기" 때문에 min-width: 0으로 풀어 주고,
+ * overflow-wrap: anywhere로 필요하면 글자 중간에서도 줄을 바꾸게 한다.
+ */
 .creator-app .youtube-scene-copy strong,
+.creator-app .youtube-scene-copy span,
 .creator-app .youtube-scene-copy p {
   margin: 0;
+  min-width: 0;
   word-break: keep-all;
-  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
 }
 
 .creator-app .youtube-scene-copy strong {

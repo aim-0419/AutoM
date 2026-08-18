@@ -8,6 +8,7 @@
  *   또한 네이버·인스타그램의 정상 주소만 열리도록 백엔드에서 한 번 더 확인합니다.
  * - 블로그·인스타그램·유튜브 기록이 한 파일에 함께 쌓이므로, 여기서 플랫폼별로 나눠 보여줍니다.
  */
+import { escapeHtml } from '../../shared/lib/html.js';
 
 // 내부 코드값을 사용자에게 보여줄 한국어 이름으로 바꾸는 표
 const MODE_LABELS = {
@@ -27,19 +28,6 @@ const PLATFORM_TABS = [
   { id: 'youtube', label: '유튜브' },
 ];
 
-// 발행 기록 화면은 저장된 결과를 읽어 표 형태로 보여 주고, 실제 게시물은 기본 브라우저에서 연다.
-function escapeHtml(str) {
-  // 기록의 제목·키워드가 HTML로 해석되지 않게 안전하게 표시한다.
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-function escapeAttr(str) {
-  return escapeHtml(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
-
 function formatDate(iso) {
   // 파일에 저장된 국제 표준 시간을 사용자가 읽기 쉬운 날짜·시각으로 바꾼다.
   const d = new Date(iso);
@@ -56,7 +44,7 @@ function formatDateParts(iso) {
 function renderDateTime(iso) {
   const { date, time } = formatDateParts(iso);
   return `
-    <time class="history-date-time" datetime="${escapeAttr(iso)}">
+    <time class="history-date-time" datetime="${escapeHtml(iso)}">
       <span>${date}</span>
       <span>${time}</span>
     </time>
@@ -90,8 +78,8 @@ function renderRows(rowsEl, entries) {
 
     tr.innerHTML = `
       <td>${renderDateTime(entry.date)}</td>
-      <td title="${escapeAttr(entry.keyword || '-')}">${escapeHtml(entry.keyword || '-')}</td>
-      <td title="${escapeAttr(entry.title || '-')}">${escapeHtml(entry.title || '-')}</td>
+      <td title="${escapeHtml(entry.keyword || '-')}">${escapeHtml(entry.keyword || '-')}</td>
+      <td title="${escapeHtml(entry.title || '-')}">${escapeHtml(entry.title || '-')}</td>
       <td>${escapeHtml(MODE_LABELS[entry.mode] || entry.mode || '-')}</td>
       <td><span class="test-result ${statusClass}">${statusLabel}</span></td>
       <td>${entry.scheduledAt ? renderDateTime(entry.scheduledAt) : '-'}</td>

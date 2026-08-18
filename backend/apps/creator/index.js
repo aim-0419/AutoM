@@ -49,7 +49,7 @@ function createMainWindow() {
   });
 
   mainWindow.setMenu(null);
-  mainWindow.loadFile(path.join(__dirname, '..', '..', '..', 'frontend', 'creator', 'index.html'));
+  mainWindow.loadFile(path.join(__dirname, '..', '..', '..', 'frontend', 'apps', 'creator', 'index.html'));
   mainWindow.on('closed', () => {
     mainWindow = null;
   });

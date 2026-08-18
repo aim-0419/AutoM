@@ -191,17 +191,17 @@ test('YouTube 대본은 영상 길이, 장면 수와 정책용 필드를 검증�
 });
 
 test('세 플랫폼 입력 예시는 특정 콘텐츠 분야에 고정되지 않는다', () => {
-  const blogSource = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'blog', 'views', 'main.js'), 'utf8');
+  const blogSource = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'features', 'blog', 'base.js'), 'utf8');
   const instagramSource = fs.readFileSync(
-    path.join(__dirname, '..', 'frontend', 'creator', 'views', 'instagram.js'),
+    path.join(__dirname, '..', 'frontend', 'features', 'instagram', 'index.js'),
     'utf8'
   );
   const youtubeSource = fs.readFileSync(
-    path.join(__dirname, '..', 'frontend', 'creator', 'views', 'youtube.js'),
+    path.join(__dirname, '..', 'frontend', 'features', 'youtube', 'index.js'),
     'utf8'
   );
   const settingsSource = fs.readFileSync(
-    path.join(__dirname, '..', 'frontend', 'blog', 'views', 'settings.js'),
+    path.join(__dirname, '..', 'frontend', 'features', 'settings', 'base.js'),
     'utf8'
   );
 
@@ -465,16 +465,16 @@ test('여러 API 키가 저장돼 있으면 사용자가 드롭다운에서 고�
 });
 
 test('인스타그램 화면에는 블로그와 같은 키워드 자동추천 연결이 있다', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'creator', 'views', 'instagram.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'features', 'instagram', 'index.js'), 'utf8');
   assert.match(source, /id="btn-recommend-instagram-keyword"/);
   assert.match(source, /window\.api\.recommendKeyword\(\)/);
 });
 
 test('Creator 유튜브 탭은 쇼츠·롱폼 선택, 키워드 추천과 영상 생성을 연결한다', () => {
-  const indexSource = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'creator', 'index.html'), 'utf8');
-  const rendererSource = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'creator', 'renderer.js'), 'utf8');
+  const indexSource = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'apps', 'creator', 'index.html'), 'utf8');
+  const rendererSource = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'apps', 'creator', 'renderer.js'), 'utf8');
   const youtubeSource = fs.readFileSync(
-    path.join(__dirname, '..', 'frontend', 'creator', 'views', 'youtube.js'),
+    path.join(__dirname, '..', 'frontend', 'features', 'youtube', 'index.js'),
     'utf8'
   );
   const preloadSource = fs.readFileSync(path.join(__dirname, '..', 'backend', 'apps', 'creator', 'preload.js'), 'utf8');
@@ -551,9 +551,11 @@ test('계정명이 포함된 인스타그램 게시물 링크를 표준 주소�
 });
 
 test('Creator 발행 기록은 블로그·인스타그램·유튜브 탭을 사용한다', () => {
-  const historySource = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'blog', 'views', 'history.js'), 'utf8');
+  const historySource = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'features', 'history', 'base.js'), 'utf8');
+  // 예전에는 한 줄짜리 래퍼 파일(creator/views/history.js)이 있었지만, 불필요한 중간 단계라
+  // 제거하고 Creator 화면 전환 파일에서 직접 platformTabs 옵션을 넘기도록 정리했다.
   const creatorHistorySource = fs.readFileSync(
-    path.join(__dirname, '..', 'frontend', 'creator', 'views', 'history.js'),
+    path.join(__dirname, '..', 'frontend', 'apps', 'creator', 'renderer.js'),
     'utf8'
   );
   assert.match(historySource, /\{ id: 'blog', label: '블로그' \}/);
@@ -570,14 +572,14 @@ test('API 키 발급 버튼은 등록된 공급자의 공식 페이지만 연결
   assert.equal(getApiKeyPageUrl('gemini'), 'https://aistudio.google.com/app/apikey');
   assert.throws(() => getApiKeyPageUrl('https://example.com'), /지원하지 않는/);
 
-  const settingsSource = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'blog', 'views', 'settings.js'), 'utf8');
+  const settingsSource = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'features', 'settings', 'base.js'), 'utf8');
   assert.match(settingsSource, /class="btn-open-api-key-page secondary"/);
   assert.match(settingsSource, /window\.api\.openApiKeyPage\(card\.dataset\.provider\)/);
 });
 
 test('Creator 메뉴는 항목별 아이콘을 구분하고 탭 전환 시 화면 상단으로 이동한다', () => {
   const rendererSource = fs.readFileSync(
-    path.join(__dirname, '..', 'frontend', 'creator', 'renderer.js'),
+    path.join(__dirname, '..', 'frontend', 'apps', 'creator', 'renderer.js'),
     'utf8'
   );
   const stylesSource = fs.readFileSync(
@@ -597,15 +599,15 @@ test('AutoM과 Creator는 같은 공통 디자인 계층을 사용한다', () =>
     fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')
   );
   const blogIndexSource = fs.readFileSync(
-    path.join(__dirname, '..', 'frontend', 'blog', 'index.html'),
+    path.join(__dirname, '..', 'frontend', 'apps', 'blog', 'index.html'),
     'utf8'
   );
   const creatorIndexSource = fs.readFileSync(
-    path.join(__dirname, '..', 'frontend', 'creator', 'index.html'),
+    path.join(__dirname, '..', 'frontend', 'apps', 'creator', 'index.html'),
     'utf8'
   );
   const blogRendererSource = fs.readFileSync(
-    path.join(__dirname, '..', 'frontend', 'blog', 'renderer.js'),
+    path.join(__dirname, '..', 'frontend', 'apps', 'blog', 'renderer.js'),
     'utf8'
   );
   const sharedStylesSource = fs.readFileSync(
@@ -639,7 +641,7 @@ test('사용자에게 표시되는 앱 이름과 설치 파일 이름에는 버�
     'utf8'
   );
   const creatorIndexSource = fs.readFileSync(
-    path.join(__dirname, '..', 'frontend', 'creator', 'index.html'),
+    path.join(__dirname, '..', 'frontend', 'apps', 'creator', 'index.html'),
     'utf8'
   );
 
@@ -654,15 +656,15 @@ test('사용자에게 표시되는 앱 이름과 설치 파일 이름에는 버�
 
 test('Creator 첫 화면은 참고 구조의 실제 대시보드로 시작한다', () => {
   const indexSource = fs.readFileSync(
-    path.join(__dirname, '..', 'frontend', 'creator', 'index.html'),
+    path.join(__dirname, '..', 'frontend', 'apps', 'creator', 'index.html'),
     'utf8'
   );
   const rendererSource = fs.readFileSync(
-    path.join(__dirname, '..', 'frontend', 'creator', 'renderer.js'),
+    path.join(__dirname, '..', 'frontend', 'apps', 'creator', 'renderer.js'),
     'utf8'
   );
   const dashboardSource = fs.readFileSync(
-    path.join(__dirname, '..', 'frontend', 'creator', 'views', 'dashboard.js'),
+    path.join(__dirname, '..', 'frontend', 'features', 'dashboard', 'index.js'),
     'utf8'
   );
 
